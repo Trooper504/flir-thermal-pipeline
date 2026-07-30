@@ -1,0 +1,8 @@
+# .gitignore
+venv/
+__pycache__/
+*.pyc
+*.jpg
+*.png
+*.csv
+.DS_Store
