@@ -2,21 +2,29 @@
 import os
 import numpy as np
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 from mock_flir import MockFlirCamera
-
-# Flag: Toggle hardware mode vs simulation
-USE_SIMULATION = False
 
 app = FastAPI(title="FLIR E8-XT Raspberry Pi Edge Collector")
 
-# Initialize hardware or fallback simulator
+# Enable CORS for web client access
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+# Toggle hardware vs simulation
+USE_SIMULATION = False
+
 if not USE_SIMULATION:
     try:
         from flir_hardware import RealFlirCamera
         camera_driver = RealFlirCamera()
-        print("[INFO] Real FLIR Camera Driver loaded successfully.")
     except Exception as e:
-        print(f"[WARN] Failed to load Real FLIR Driver ({e}). Falling back to Mock Simulator.")
+        print(f"[WARN] Failed to load Real FLIR Driver ({e}). Using Mock Simulator.")
         camera_driver = MockFlirCamera()
 else:
     camera_driver = MockFlirCamera()
@@ -32,23 +40,17 @@ def read_root():
 
 @app.get("/api/v1/thermal-frame")
 def get_thermal_frame():
-    """
-    Extracts or simulates the 2D temperature array (°C) and returns JSON payload.
-    """
-    # Capture matrix (NumPy array)
     matrix = camera_driver.capture_radiometric_matrix()
-    
     return {
         "timestamp": float(np.round(np.datetime64('now').astype(float), 3)),
         "width": matrix.shape[1],
         "height": matrix.shape[0],
         "min_temp": float(matrix.min()),
         "max_temp": float(matrix.max()),
-        "data": matrix.tolist()  # 2D array of float temperatures
+        "data": matrix.tolist()
     }
 
 
 if __name__ == "__main__":
     import uvicorn
-    # Runs server on Port 8081
     uvicorn.run(app, host="0.0.0.0", port=8081)

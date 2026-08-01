@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>FLIR Real-Time Edge Thermal Dashboard</title>
+  <!-- Tailwind CSS & Plotly.js for client-side rendering -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdn.plot.ly/plotly-2.27.0.min.js"></script>
+</head>
+<body class="bg-gray-900 text-white font-sans p-6">
+
+  <div class="max-w-7xl mx-auto space-y-6">
+    <!-- Top Header & Controls -->
+    <header class="flex justify-between items-center border-b border-gray-700 pb-4">
+      <div>
+        <h1 class="text-2xl font-bold text-orange-500">FLIR Thermal Radiometric WebApp</h1>
+        <p class="text-sm text-gray-400">Client-Side Processing & Gradient Analysis</p>
+      </div>
+      <div class="flex items-center gap-4">
+        <label class="text-sm">Pi API URL:</label>
+        <input id="apiUrl" type="text" value="http://localhost:8081/api/v1/thermal-frame" 
+               class="bg-gray-800 border border-gray-600 rounded px-3 py-1 text-sm w-80 text-orange-300">
+        <button id="fetchBtn" onclick="fetchAndProcess()" 
+                class="bg-orange-600 hover:bg-orange-500 text-white px-4 py-1.5 rounded text-sm font-semibold transition">
+          Fetch Frame
+        </button>
+      </div>
+    </header>
+
+    <!-- Stat Cards -->
+    <div class="grid grid-cols-4 gap-4 text-center">
+      <div class="bg-gray-800 p-4 rounded-lg border border-gray-700">
+        <div class="text-gray-400 text-xs uppercase">Min Temp</div>
+        <div id="minTemp" class="text-2xl font-bold text-blue-400">-- °C</div>
+      </div>
+      <div class="bg-gray-800 p-4 rounded-lg border border-gray-700">
+        <div class="text-gray-400 text-xs uppercase">Max Temp</div>
+        <div id="maxTemp" class="text-2xl font-bold text-red-500">-- °C</div>
+      </div>
+      <div class="bg-gray-800 p-4 rounded-lg border border-gray-700">
+        <div class="text-gray-400 text-xs uppercase">Mean Temp</div>
+        <div id="meanTemp" class="text-2xl font-bold text-yellow-400">-- °C</div>
+      </div>
+      <div class="bg-gray-800 p-4 rounded-lg border border-gray-700">
+        <div class="text-gray-400 text-xs uppercase">Max Gradient (|∇T|)</div>
+        <div id="maxGrad" class="text-2xl font-bold text-emerald-400">-- °C/px</div>
+      </div>
+    </div>
+
+    <!-- Client-Side Plots -->
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+      <div class="bg-gray-800 p-4 rounded-lg border border-gray-700">
+        <h2 class="text-lg font-semibold mb-2 text-center text-orange-400">Radiometric Heatmap (°C)</h2>
+        <div id="thermalPlot" class="w-full h-96"></div>
+      </div>
+      <div class="bg-gray-800 p-4 rounded-lg border border-gray-700">
+        <h2 class="text-lg font-semibold mb-2 text-center text-emerald-400">Spatial Thermal Gradient (|∇T|)</h2>
+        <div id="gradientPlot" class="w-full h-96"></div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // Client-Side Spatial Gradient Computation Math (|dT/dx, dT/dy|)
+    function computeGradient2D(matrix) {
+      const rows = matrix.length;
+      const cols = matrix[0].length;
+      let gradMag = Array.from({ length: rows }, () => new Array(cols).fill(0));
+      let maxGrad = 0;
+
+      for (let r = 1; r < rows - 1; r++) {
+        for (let c = 1; c < cols - 1; c++) {
+          // Central Difference Scheme
+          let dx = (matrix[r][c + 1] - matrix[r][c - 1]) / 2.0;
+          let dy = (matrix[r + 1][c] - matrix[r - 1][c]) / 2.0;
+          let mag = Math.sqrt(dx * dx + dy * dy);
+          
+          gradMag[r][c] = mag;
+          if (mag > maxGrad) maxGrad = mag;
+        }
+      }
+      return { gradMag, maxGrad };
+    }
+
+    async function fetchAndProcess() {
+      const url = document.getElementById("apiUrl").value;
+      try {
+        const res = await fetch(url);
+        const json = await res.json();
+        const matrix = json.data;
+
+        // 1. Calculate Stats Client-Side
+        const flatArray = matrix.flat();
+        const minTemp = Math.min(...flatArray);
+        const maxTemp = Math.max(...flatArray);
+        const meanTemp = flatArray.reduce((a, b) => a + b, 0) / flatArray.length;
+
+        // 2. Client-Side Math Computation (Spatial Gradient)
+        const { gradMag, maxGrad } = computeGradient2D(matrix);
+
+        // Update Stat Cards
+        document.getElementById("minTemp").innerText = `${minTemp.toFixed(1)} °C`;
+        document.getElementById("maxTemp").innerText = `${maxTemp.toFixed(1)} °C`;
+        document.getElementById("meanTemp").innerText = `${meanTemp.toFixed(1)} °C`;
+        document.getElementById("maxGrad").innerText = `${maxGrad.toFixed(2)} °C/px`;
+
+        // 3. Render Heatmap Plotly Chart
+        Plotly.newPlot('thermalPlot', [{
+          z: matrix,
+          type: 'heatmap',
+          colorscale: 'YlOrRd'
+        }], { margin: { t: 10, b: 10, l: 10, r: 10 }, paper_bgcolor: 'rgba(0,0,0,0)', plot_bgcolor: 'rgba(0,0,0,0)' });
+
+        // 4. Render Spatial Gradient Plotly Chart
+        Plotly.newPlot('gradientPlot', [{
+          z: gradMag,
+          type: 'heatmap',
+          colorscale: 'Viridis'
+        }], { margin: { t: 10, b: 10, l: 10, r: 10 }, paper_bgcolor: 'rgba(0,0,0,0)', plot_bgcolor: 'rgba(0,0,0,0)' });
+
+      } catch (err) {
+        alert("Failed to fetch data from Pi API: " + err.message);
+      }
+    }
+
+    // Auto load on start
+    window.onload = fetchAndProcess;
+  </script>
+</body>
+</html>
