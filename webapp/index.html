@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>FLIR Scalable Edge Thermal Analyzer</title>
+  <title>FLIR Thermal Radiometric Analyzer</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <script src="https://cdn.plot.ly/plotly-2.27.0.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/gif.js/0.2.0/gif.js"></script>
@@ -14,184 +14,402 @@
     <!-- Header -->
     <header class="flex justify-between items-center border-b border-slate-800 pb-4">
       <div>
-        <h1 class="text-2xl font-bold text-orange-500">FLIR Thermal Radiometric Analyzer</h1>
-        <p class="text-xs text-slate-400">Interactive Master-Detail Ingestion & Batch Thermal Inspection</p>
+        <h1 class="text-xl font-bold text-slate-100 tracking-wide">FLIR Radiometric Processing Unit</h1>
+        <p class="text-xs text-slate-400 font-mono">Edge Ingestion, Spatial Gradient Processing, and Line Profile Analysis</p>
       </div>
       <div class="flex items-center gap-2">
-        <span id="statusBadge" class="px-3 py-1 bg-slate-800 border border-slate-700 rounded-full text-xs font-mono text-slate-300">
-          Status: Idle
+        <span id="statusBadge" class="px-3 py-1 bg-slate-900 border border-slate-700 rounded text-xs font-mono text-slate-300">
+          SYSTEM IDLE
         </span>
       </div>
     </header>
 
-    <!-- SECTION 1: GLOBAL CONFIGURATION PANEL -->
-    <div class="bg-slate-900 border border-slate-800 p-4 rounded-xl shadow-lg space-y-3">
-      <h2 class="text-sm font-semibold uppercase tracking-wider text-orange-400 border-b border-slate-800 pb-2">
-        1. Radiometric & Ingestion Source Parameters
-      </h2>
+    <!-- SECTION 1: SYSTEM CONFIGURATION -->
+    <div class="bg-slate-900 border border-slate-800 p-4 rounded-lg space-y-3">
+      <div class="flex justify-between items-center border-b border-slate-800 pb-2">
+        <h2 class="text-xs font-bold uppercase tracking-wider text-slate-400">
+          1. Radiometric Parameters and Ingestion
+        </h2>
+        <span class="text-[11px] text-slate-500 font-mono">Storage: IndexedDB Active</span>
+      </div>
+      
       <div class="grid grid-cols-2 md:grid-cols-6 gap-4 text-xs">
         <div>
           <label class="block text-slate-400 mb-1">Data Source</label>
           <select id="cfgDataSource" onchange="handleSourceChange()" 
-                  class="w-full bg-slate-800 border border-slate-700 rounded px-2 py-1.5 text-orange-400 font-semibold focus:outline-none focus:border-orange-500">
-            <option value="simulation">Offline Simulation (Local)</option>
+                  class="w-full bg-slate-950 border border-slate-700 rounded px-2 py-1.5 text-slate-200 font-mono focus:outline-none focus:border-slate-500">
+            <option value="simulation">Offline Simulation</option>
             <option value="pi">Live Pi API</option>
+            <option value="csv">Import CSV / TXT</option>
           </select>
         </div>
         <div>
-          <label class="block text-slate-400 mb-1">Emissivity (ε)</label>
-          <input id="cfgEmissivity" type="number" step="0.01" min="0.1" max="1.0" value="0.95" 
-                 class="w-full bg-slate-800 border border-slate-700 rounded px-2 py-1.5 text-white font-mono">
+          <label class="block text-slate-400 mb-1">Emissivity (e)</label>
+          <input id="cfgEmissivity" type="number" step="0.01" min="0.1" max="1.0" value="0.95" onchange="triggerRecalibration()"
+                 class="w-full bg-slate-950 border border-slate-700 rounded px-2 py-1.5 text-slate-200 font-mono">
         </div>
         <div>
-          <label class="block text-slate-400 mb-1">Reflected Temp (°C)</label>
-          <input id="cfgReflTemp" type="number" step="0.5" value="20.0" 
-                 class="w-full bg-slate-800 border border-slate-700 rounded px-2 py-1.5 text-white font-mono">
+          <label class="block text-slate-400 mb-1">Hotspot Cutoff (k.s)</label>
+          <input id="cfgHotspotSensitivity" type="number" step="0.5" min="1.0" max="5.0" value="2.0" onchange="replotActiveCanvas()"
+                 class="w-full bg-slate-950 border border-slate-700 rounded px-2 py-1.5 text-slate-200 font-mono">
         </div>
         <div>
-          <label class="block text-slate-400 mb-1">Display Min Temp (°C)</label>
-          <input id="cfgMinTemp" type="number" step="1" value="15" 
-                 class="w-full bg-slate-800 border border-slate-700 rounded px-2 py-1.5 text-white font-mono">
+          <label class="block text-slate-400 mb-1">Display Min ( deg C)</label>
+          <input id="cfgMinTemp" type="number" step="1" value="15" onchange="replotActiveCanvas()"
+                 class="w-full bg-slate-950 border border-slate-700 rounded px-2 py-1.5 text-slate-200 font-mono">
         </div>
         <div>
-          <label class="block text-slate-400 mb-1">Display Max Temp (°C)</label>
-          <input id="cfgMaxTemp" type="number" step="1" value="60" 
-                 class="w-full bg-slate-800 border border-slate-700 rounded px-2 py-1.5 text-white font-mono">
+          <label class="block text-slate-400 mb-1">Display Max ( deg C)</label>
+          <input id="cfgMaxTemp" type="number" step="1" value="60" onchange="replotActiveCanvas()"
+                 class="w-full bg-slate-950 border border-slate-700 rounded px-2 py-1.5 text-slate-200 font-mono">
         </div>
         <div>
-          <label class="block text-slate-400 mb-1">Pi API Endpoint</label>
+          <label class="block text-slate-400 mb-1">Pi Endpoint</label>
           <input id="cfgApiUrl" type="text" value="http://localhost:8081/api/v1/thermal-frame" disabled
-                 class="w-full bg-slate-800 border border-slate-700 rounded px-2 py-1.5 text-slate-500 font-mono opacity-50">
+                 class="w-full bg-slate-950 border border-slate-800 rounded px-2 py-1.5 text-slate-600 font-mono opacity-60">
         </div>
+      </div>
+
+      <div id="csvUploadContainer" class="hidden border-t border-slate-800 pt-3 mt-3">
+        <label class="block text-xs font-semibold text-slate-400 mb-1">Select CSV / TXT Files:</label>
+        <input id="csvFileInput" type="file" multiple accept=".csv, .txt" onchange="handleCsvFilesUpload(event)"
+               class="block w-full text-xs text-slate-400 file:mr-4 file:py-1 file:px-3 file:rounded file:border file:border-slate-700 file:text-xs file:bg-slate-800 file:text-slate-300 hover:file:bg-slate-700 cursor-pointer">
       </div>
     </div>
 
-    <!-- SECTION 2: STREAM CONTROLS & BATCH ACTIONS -->
-    <div class="bg-slate-900 border border-slate-800 p-4 rounded-xl shadow-lg flex flex-wrap justify-between items-center gap-4">
+    <!-- SECTION 2: STREAM CONTROLS -->
+    <div class="bg-slate-900 border border-slate-800 p-4 rounded-lg flex flex-wrap justify-between items-center gap-4">
       <div class="flex items-center gap-3">
         <button id="btnImport" onclick="startImportStream()" 
-                class="bg-emerald-600 hover:bg-emerald-500 text-white px-5 py-2 rounded-lg font-semibold text-sm transition flex items-center gap-2">
-          <span>▶</span> Start Import Stream
+                class="bg-slate-800 hover:bg-slate-700 text-slate-100 border border-slate-600 px-4 py-1.5 rounded text-xs font-mono transition">
+          START STREAM
         </button>
         <button id="btnStop" onclick="stopImportStream()" disabled 
-                class="bg-rose-600/50 text-slate-400 cursor-not-allowed px-5 py-2 rounded-lg font-semibold text-sm transition flex items-center gap-2">
-          <span>⏹</span> Stop Stream
+                class="bg-slate-950 text-slate-600 border border-slate-800 opacity-50 cursor-not-allowed px-4 py-1.5 rounded text-xs font-mono transition">
+          STOP STREAM
         </button>
-        <button id="btnClear" onclick="clearFrameBuffer()" 
-                class="bg-slate-800 hover:bg-slate-700 text-slate-300 px-4 py-2 rounded-lg text-sm border border-slate-700 transition">
-          Clear Gallery
+        <button id="btnClear" onclick="clearDbAndGallery()" 
+                class="bg-slate-950 hover:bg-slate-800 text-slate-400 border border-slate-800 px-4 py-1.5 rounded text-xs font-mono transition">
+          CLEAR DATABASE
         </button>
       </div>
 
-      <!-- Contextual Batch Export Actions -->
-      <div id="batchActionGroup" class="hidden flex items-center gap-3 bg-slate-950 px-4 py-2 border border-slate-800 rounded-lg">
-        <span class="text-xs text-slate-400"><strong id="lblSelectedCount" class="text-orange-400">0</strong> frame(s) selected</span>
-        <button onclick="exportSelectedCSV()" class="bg-emerald-600 hover:bg-emerald-500 text-white text-xs px-3 py-1.5 rounded font-semibold transition">
-          📊 Export CSV (°C)
+      <div id="batchActionGroup" class="hidden flex items-center gap-3 bg-slate-950 px-3 py-1.5 border border-slate-800 rounded">
+        <span class="text-xs text-slate-400 font-mono"><strong id="lblSelectedCount" class="text-slate-200">0</strong> selected</span>
+        <button onclick="exportSelectedCSV()" class="bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs px-3 py-1 rounded font-mono border border-slate-700 transition">
+          EXPORT CSV
         </button>
-        <button id="btnGenerateGif" onclick="generateSelectedGIF()" class="bg-indigo-600 hover:bg-indigo-500 text-white text-xs px-3 py-1.5 rounded font-semibold transition">
-          🎬 Generate GIF (Requires 2+)
+        <button onclick="exportTemperatureCurveImage()" class="bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs px-3 py-1 rounded font-mono border border-slate-700 transition">
+          EXPORT TEMP CURVE
+        </button>
+        <button id="btnGenerateGif" onclick="generateSelectedGIF()" class="bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs px-3 py-1 rounded font-mono border border-slate-700 transition">
+          GENERATE GIF
         </button>
       </div>
     </div>
 
-    <!-- SECTION 3: IMPORTED FRAMES GALLERY -->
-    <div class="bg-slate-900 border border-slate-800 p-4 rounded-xl shadow-lg space-y-3">
+    <!-- SECTION 3: STORED FRAMES GALLERY -->
+    <div class="bg-slate-900 border border-slate-800 p-4 rounded-lg space-y-3">
       <div class="flex justify-between items-center border-b border-slate-800 pb-2">
-        <h2 class="text-sm font-semibold uppercase tracking-wider text-slate-300">
-          Imported Thermal Frames Gallery (<span id="lblFrameCount" class="text-orange-400">0</span>)
+        <h2 class="text-xs font-bold uppercase tracking-wider text-slate-400">
+          Stored Frames (<span id="lblFrameCount" class="text-slate-200 font-mono">0</span>)
         </h2>
-        <button onclick="selectAllFrames()" class="text-xs text-orange-400 hover:underline">Select All</button>
+        <button onclick="selectAllFrames()" class="text-xs text-slate-400 hover:text-slate-200 font-mono">Select All</button>
       </div>
-      <div id="galleryGrid" class="grid grid-cols-2 md:grid-cols-6 gap-3 max-h-48 overflow-y-auto p-1">
-        <!-- Thumbnails appended here -->
+      <div id="galleryGrid" class="grid grid-cols-2 md:grid-cols-6 gap-3 max-h-40 overflow-y-auto p-1">
+        <!-- Frame items -->
       </div>
     </div>
 
-    <!-- SECTION 4: DETAILED CANVAS INSPECTOR -->
+    <!-- SECTION 4: INSPECTOR DASHBOARD -->
     <div id="inspectorPanel" class="hidden space-y-4">
-      <div class="bg-slate-900 border border-slate-800 px-4 py-3 rounded-xl flex justify-between items-center shadow-lg">
-        <div class="flex items-center gap-2">
-          <span class="text-xs text-slate-400">Selected Frame Timestamp:</span>
-          <span id="inspectorTimestamp" class="text-sm font-mono text-orange-400 font-bold">--</span>
+      <div class="bg-slate-900 border border-slate-800 p-3 rounded-lg flex flex-wrap justify-between items-center gap-4">
+        <div class="flex items-center gap-3 text-xs font-mono">
+          <span class="text-slate-500">Frame:</span>
+          <span id="inspectorTimestamp" class="text-slate-200 font-bold">--</span>
         </div>
-        <div class="flex items-center gap-4 font-mono text-sm">
-          <div class="bg-slate-950 px-3 py-1 border border-slate-800 rounded">
-            Pixel (X, Y): <span id="hoverCoords" class="text-slate-300">Hover over canvas</span>
+        <div id="hotspotAlert" class="text-xs font-mono">
+          <!-- Populated by JS -->
+        </div>
+        <div class="flex items-center gap-3 font-mono text-xs">
+          <div class="bg-slate-950 px-2.5 py-1 border border-slate-800 rounded">
+            Coord: <span id="hoverCoords" class="text-slate-400">--</span>
           </div>
-          <div class="bg-slate-950 px-3 py-1 border border-slate-800 rounded text-orange-400 font-bold">
-            Temp: <span id="hoverTemp">-- °C</span>
+          <div class="bg-slate-950 px-2.5 py-1 border border-slate-800 rounded text-slate-200 font-bold">
+            Temp: <span id="hoverTemp">-- deg C</span>
           </div>
         </div>
       </div>
 
+      <!-- MAIN CANVASES -->
       <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-        <div class="bg-slate-900 p-4 rounded-xl border border-slate-800 shadow-lg">
-          <h3 class="text-sm font-semibold text-orange-400 mb-2">Radiometric Heatmap (°C)</h3>
-          <div id="thermalPlot" class="w-full h-96"></div>
+        <div class="bg-slate-900 p-4 rounded-lg border border-slate-800">
+          <h3 class="text-xs font-bold font-mono text-slate-400 mb-2">RADIOMETRIC HEATMAP (deg C)</h3>
+          <div id="thermalPlot" class="w-full h-80"></div>
         </div>
-        <div class="bg-slate-900 p-4 rounded-xl border border-slate-800 shadow-lg">
-          <h3 class="text-sm font-semibold text-emerald-400 mb-2">Spatial Thermal Gradient (|∇T|)</h3>
-          <div id="gradientPlot" class="w-full h-96"></div>
+        <div class="bg-slate-900 p-4 rounded-lg border border-slate-800">
+          <h3 class="text-xs font-bold font-mono text-slate-400 mb-2">SPATIAL THERMAL GRADIENT (dT deg C)</h3>
+          <div id="gradientPlot" class="w-full h-80"></div>
         </div>
       </div>
-    </div>
 
-    <!-- GIF RESULT PREVIEW -->
-    <div id="gifContainer" class="hidden bg-slate-900 border border-slate-800 p-4 rounded-xl text-center">
-      <h3 class="text-sm font-bold text-indigo-400 mb-2">Generated Thermal GIF</h3>
-      <img id="thermalGifResult" class="mx-auto border border-slate-700 rounded-lg max-h-64 shadow-lg">
+      <!-- SECTION 5: CROSS-SECTION SLICE ANALYZER -->
+      <div class="bg-slate-900 p-4 rounded-lg border border-slate-800 space-y-3">
+        <div class="flex justify-between items-center border-b border-slate-800 pb-2">
+          <h3 class="text-xs font-bold font-mono text-slate-400">1D CROSS-SECTION PROFILE</h3>
+          <div class="flex items-center gap-3 text-xs font-mono">
+            <label class="text-slate-500">Slice Direction:</label>
+            <select id="sliceOrientation" onchange="updateLineProfile()" class="bg-slate-950 border border-slate-800 text-slate-300 rounded px-2 py-1 focus:outline-none">
+              <option value="horizontal">Horizontal (X-Axis Slice)</option>
+              <option value="vertical">Vertical (Y-Axis Slice)</option>
+            </select>
+            <label class="text-slate-500">Index:</label>
+            <input id="sliceIndex" type="number" value="120" min="0" onchange="updateLineProfile()" class="w-16 bg-slate-950 border border-slate-800 text-slate-300 rounded px-2 py-1 text-center">
+          </div>
+        </div>
+        <div id="lineProfilePlot" class="w-full h-48"></div>
+      </div>
     </div>
   </div>
 
   <script>
+    let db = null;
     let frameBuffer = [];
     let selectedIndices = new Set();
+    let activeInspectedIdx = null;
     let isImporting = false;
     let importIntervalId = null;
 
-    // --- SOURCE SWITCHER CONTROL ---
-    function handleSourceChange() {
-      const source = document.getElementById("cfgDataSource").value;
-      const apiInput = document.getElementById("cfgApiUrl");
-      
-      if (source === "pi") {
-        apiInput.disabled = false;
-        apiInput.classList.remove("text-slate-500", "opacity-50");
-        apiInput.classList.add("text-orange-300");
-      } else {
-        apiInput.disabled = true;
-        apiInput.classList.remove("text-orange-300");
-        apiInput.classList.add("text-slate-500", "opacity-50");
+    // --- INDEXEDDB STORAGE ---
+    function initDatabase() {
+      const request = indexedDB.open("FlirThermalPipelineDB", 1);
+      request.onupgradeneeded = function(e) {
+        db = e.target.result;
+        if (!db.objectStoreNames.contains("frames")) {
+          db.createObjectStore("frames", { keyPath: "id" });
+        }
+      };
+      request.onsuccess = function(e) {
+        db = e.target.result;
+        loadFramesFromDatabase();
+      };
+    }
+
+    function saveFrameToDatabase(frameData) {
+      if (!db) return;
+      const tx = db.transaction("frames", "readwrite");
+      tx.objectStore("frames").put(frameData);
+    }
+
+    function loadFramesFromDatabase() {
+      if (!db) return;
+      const tx = db.transaction("frames", "readonly");
+      const request = tx.objectStore("frames").getAll();
+
+      request.onsuccess = function() {
+        const storedFrames = request.result;
+        if (storedFrames && storedFrames.length > 0) {
+          const currentEmissivity = parseFloat(document.getElementById("cfgEmissivity").value);
+          frameBuffer = storedFrames.map(f => {
+            f.calibratedMatrix = applyPlanckRecalibration(f.rawMatrix, currentEmissivity, 20.0, 0.95);
+            return f;
+          });
+
+          document.getElementById("lblFrameCount").innerText = frameBuffer.length;
+          document.getElementById("galleryGrid").innerHTML = "";
+          frameBuffer.forEach(f => appendThumbnailToGallery(f));
+        }
+      };
+    }
+
+    function clearDbAndGallery() {
+      if (confirm("Delete all stored frames from IndexedDB?")) {
+        if (db) {
+          const tx = db.transaction("frames", "readwrite");
+          tx.objectStore("frames").clear();
+        }
+        frameBuffer = [];
+        selectedIndices.clear();
+        activeInspectedIdx = null;
+        document.getElementById("galleryGrid").innerHTML = "";
+        document.getElementById("lblFrameCount").innerText = "0";
+        document.getElementById("inspectorPanel").classList.add("hidden");
+        updateBatchUI();
       }
     }
 
-    // --- MOCK THERMAL MATRIX GENERATOR (For Offline Mode) ---
+    // --- CONTROL HANDLERS ---
+    function handleSourceChange() {
+      const source = document.getElementById("cfgDataSource").value;
+      const apiInput = document.getElementById("cfgApiUrl");
+      const csvContainer = document.getElementById("csvUploadContainer");
+      
+      if (source === "pi") {
+        apiInput.disabled = false;
+        apiInput.classList.remove("text-slate-600", "opacity-60");
+        apiInput.classList.add("text-slate-200");
+        csvContainer.classList.add("hidden");
+      } else if (source === "csv") {
+        apiInput.disabled = true;
+        apiInput.classList.add("text-slate-600", "opacity-60");
+        csvContainer.classList.remove("hidden");
+      } else {
+        apiInput.disabled = true;
+        apiInput.classList.add("text-slate-600", "opacity-60");
+        csvContainer.classList.add("hidden");
+      }
+    }
+
+    // --- CORRECT CSV PARSER (Splits strictly on semicolon ';') ---
+    async function handleCsvFilesUpload(event) {
+      const files = Array.from(event.target.files);
+      if (files.length === 0) return;
+
+      for (const file of files) {
+        const text = await file.text();
+        const matrix = parseFlirCsvText(text);
+        if (matrix && matrix.length > 0) {
+          const currentEmissivity = parseFloat(document.getElementById("cfgEmissivity").value);
+          const frameData = {
+            id: frameBuffer.length,
+            timestamp: file.name,
+            rawMatrix: matrix,
+            calibratedMatrix: applyPlanckRecalibration(matrix, currentEmissivity, 20.0, 0.95),
+            width: matrix[0].length,
+            height: matrix.length
+          };
+          frameBuffer.push(frameData);
+          saveFrameToDatabase(frameData);
+          appendThumbnailToGallery(frameData);
+        }
+      }
+      document.getElementById("lblFrameCount").innerText = frameBuffer.length;
+    }
+
+    function parseFlirCsvText(text) {
+      const lines = text.split(/\r?\n/);
+      let matrix = [];
+
+      lines.forEach(line => {
+        line = line.trim();
+        if (!line || line.startsWith('Файл:') || line.startsWith('File:')) return;
+
+        const parts = line.split(';');
+        let row = [];
+        parts.forEach(p => {
+          p = p.trim();
+          if (!p || p.startsWith('Кадр') || p.startsWith('Frame')) return;
+          const val = parseFloat(p.replace(',', '.'));
+          if (!isNaN(val)) row.push(val);
+        });
+        if (row.length > 0) matrix.push(row);
+      });
+      return matrix.length > 0 ? matrix : null;
+    }
+
+    // --- HOTSPOT ROI ENGINE ---
+    function detectHotspotROI(matrix, sensitivityMultiplier = 2.0) {
+      let sum = 0, count = 0;
+      let minVal = Infinity, maxVal = -Infinity;
+      let maxR = 0, maxC = 0;
+
+      for (let r = 0; r < matrix.length; r++) {
+        for (let c = 0; c < matrix[r].length; c++) {
+          const v = matrix[r][c];
+          sum += v;
+          count++;
+          if (v < minVal) minVal = v;
+          if (v > maxVal) { maxVal = v; maxR = r; maxC = c; }
+        }
+      }
+      const mean = sum / count;
+
+      let varianceSum = 0;
+      for (let r = 0; r < matrix.length; r++) {
+        for (let c = 0; c < matrix[r].length; c++) {
+          varianceSum += Math.pow(matrix[r][c] - mean, 2);
+        }
+      }
+      const stdDev = Math.sqrt(varianceSum / count);
+      const hotspotThreshold = mean + (sensitivityMultiplier * stdDev);
+
+      let minR = matrix.length, maxRow = 0;
+      let minC = matrix[0].length, maxCol = 0;
+      let hotspotPixelCount = 0;
+
+      for (let r = 0; r < matrix.length; r++) {
+        for (let c = 0; c < matrix[r].length; c++) {
+          if (matrix[r][c] >= hotspotThreshold) {
+            hotspotPixelCount++;
+            if (r < minR) minR = r;
+            if (r > maxRow) maxRow = r;
+            if (c < minC) minC = c;
+            if (c > maxCol) maxCol = c;
+          }
+        }
+      }
+
+      const hasHotspot = hotspotPixelCount > 5;
+      return {
+        hasHotspot,
+        threshold: hotspotThreshold,
+        peakTemp: maxVal,
+        peakCoord: { x: maxC, y: maxR },
+        bbox: hasHotspot ? { x0: minC, y0: minR, x1: maxCol, y1: maxRow } : null
+      };
+    }
+
+    // --- PLANCK RE-CALIBRATION ---
+    function applyPlanckRecalibration(matrix, newEmissivity, reflTempC = 20.0, baseEmissivity = 0.95) {
+      const e_target = parseFloat(newEmissivity);
+      const e_base = parseFloat(baseEmissivity);
+      const T_refl_K = parseFloat(reflTempC) + 273.15;
+
+      return matrix.map(row => row.map(tempC => {
+        const T_obj_K = tempC + 273.15;
+        const W_total = e_base * Math.pow(T_obj_K, 4) + (1.0 - e_base) * Math.pow(T_refl_K, 4);
+        const W_emitted = (W_total - (1.0 - e_target) * Math.pow(T_refl_K, 4)) / e_target;
+        const T_corrected_K = Math.pow(Math.max(0, W_emitted), 0.25);
+        return parseFloat((T_corrected_K - 273.15).toFixed(2));
+      }));
+    }
+
+    function triggerRecalibration() {
+      const targetEmissivity = parseFloat(document.getElementById("cfgEmissivity").value);
+      frameBuffer.forEach(frame => {
+        frame.calibratedMatrix = applyPlanckRecalibration(frame.rawMatrix, targetEmissivity, 20.0, 0.95);
+      });
+      if (activeInspectedIdx !== null) inspectFrame(activeInspectedIdx);
+    }
+
+    function replotActiveCanvas() {
+      if (activeInspectedIdx !== null) inspectFrame(activeInspectedIdx);
+    }
+
+    // --- MOCK DATA ---
     function generateMockThermalMatrix(rows = 60, cols = 80) {
       let matrix = Array.from({ length: rows }, () => new Array(cols).fill(22.0));
-      // Base temperature distribution with random thermal noise
       for (let r = 0; r < rows; r++) {
         for (let c = 0; c < cols; c++) {
           matrix[r][c] += Math.random() * 1.5;
         }
       }
-      // Add a simulated thermal hotspot (component heating over time)
       const centerR = Math.floor(rows / 2);
       const centerC = Math.floor(cols / 2);
-      const tempBoost = 15.0 + Math.random() * 5.0;
+      const tempBoost = 18.0 + Math.random() * 5.0;
 
-      for (let r = centerR - 8; r <= centerR + 8; r++) {
-        for (let c = centerC - 10; c <= centerC + 10; c++) {
+      for (let r = centerR - 6; r <= centerR + 6; r++) {
+        for (let c = centerC - 8; c <= centerC + 8; c++) {
           if (r >= 0 && r < rows && c >= 0 && c < cols) {
             const dist = Math.sqrt(Math.pow(r - centerR, 2) + Math.pow(c - centerC, 2));
-            matrix[r][c] += Math.max(0, tempBoost - dist * 1.2);
+            matrix[r][c] += Math.max(0, tempBoost - dist * 1.5);
           }
         }
       }
       return matrix;
     }
 
-    // --- STREAM CONTROLS ---
+    // --- INGESTION ---
     function startImportStream() {
       isImporting = true;
       document.getElementById("btnImport").disabled = true;
@@ -199,12 +417,11 @@
       
       const stopBtn = document.getElementById("btnStop");
       stopBtn.disabled = false;
-      stopBtn.classList.remove("bg-rose-600/50", "text-slate-400", "cursor-not-allowed");
-      stopBtn.classList.add("bg-rose-600", "hover:bg-rose-500", "text-white");
+      stopBtn.classList.remove("opacity-50", "cursor-not-allowed", "text-slate-600");
+      stopBtn.classList.add("text-slate-200", "hover:bg-slate-900");
 
       const sourceMode = document.getElementById("cfgDataSource").value;
-      document.getElementById("statusBadge").innerText = `Status: Importing (${sourceMode === 'pi' ? 'Live Pi' : 'Offline Sim'})...`;
-      document.getElementById("statusBadge").className = "px-3 py-1 bg-emerald-950 border border-emerald-800 rounded-full text-xs font-mono text-emerald-400";
+      document.getElementById("statusBadge").innerText = `INGESTING (${sourceMode.toUpperCase()})`;
 
       importIntervalId = setInterval(ingestFrame, 1000);
     }
@@ -218,54 +435,46 @@
 
       const stopBtn = document.getElementById("btnStop");
       stopBtn.disabled = true;
-      stopBtn.classList.add("bg-rose-600/50", "text-slate-400", "cursor-not-allowed");
+      stopBtn.classList.add("opacity-50", "cursor-not-allowed", "text-slate-600");
 
-      document.getElementById("statusBadge").innerText = "Status: Stream Stopped";
-      document.getElementById("statusBadge").className = "px-3 py-1 bg-slate-800 border border-slate-700 rounded-full text-xs font-mono text-slate-300";
+      document.getElementById("statusBadge").innerText = "SYSTEM IDLE";
     }
 
-    function clearFrameBuffer() {
-      frameBuffer = [];
-      selectedIndices.clear();
-      document.getElementById("galleryGrid").innerHTML = "";
-      document.getElementById("lblFrameCount").innerText = "0";
-      document.getElementById("inspectorPanel").classList.add("hidden");
-      document.getElementById("gifContainer").classList.add("hidden");
-      updateBatchUI();
-    }
-
-    // --- FRAME INGESTION ENGINE ---
     async function ingestFrame() {
       const sourceMode = document.getElementById("cfgDataSource").value;
-      let frameMatrix = null;
-      let width = 80;
-      let height = 60;
+      let rawMatrix = null;
+      let width = 80, height = 60;
 
       if (sourceMode === "pi") {
         const url = document.getElementById("cfgApiUrl").value;
         try {
           const res = await fetch(url);
           const json = await res.json();
-          frameMatrix = json.data;
+          rawMatrix = json.data;
           width = json.width;
           height = json.height;
         } catch (err) {
-          console.error("Live Pi fetch failed:", err);
+          console.error("Fetch error:", err);
           return;
         }
+      } else if (sourceMode === "simulation") {
+        rawMatrix = generateMockThermalMatrix(60, 80);
       } else {
-        // Offline simulation mode
-        frameMatrix = generateMockThermalMatrix(60, 80);
+        return;
       }
 
+      const currentEmissivity = parseFloat(document.getElementById("cfgEmissivity").value);
       const frameData = {
         id: frameBuffer.length,
         timestamp: new Date().toLocaleTimeString(),
-        matrix: frameMatrix,
+        rawMatrix: rawMatrix,
+        calibratedMatrix: applyPlanckRecalibration(rawMatrix, currentEmissivity, 20.0, 0.95),
         width: width,
         height: height
       };
+      
       frameBuffer.push(frameData);
+      saveFrameToDatabase(frameData);
 
       document.getElementById("lblFrameCount").innerText = frameBuffer.length;
       appendThumbnailToGallery(frameData);
@@ -274,17 +483,16 @@
     function appendThumbnailToGallery(frame) {
       const grid = document.getElementById("galleryGrid");
       const thumb = document.createElement("div");
-      thumb.className = "bg-slate-800 border border-slate-700 p-2 rounded-lg cursor-pointer hover:border-orange-500 transition relative group";
+      thumb.className = "bg-slate-950 border border-slate-800 p-2 rounded cursor-pointer hover:border-slate-600 transition";
       
       thumb.innerHTML = `
         <div class="flex justify-between items-center mb-1">
-          <input type="checkbox" class="frame-checkbox rounded bg-slate-900 border-slate-700 text-orange-500 focus:ring-0" 
+          <input type="checkbox" class="frame-checkbox rounded bg-slate-900 border-slate-700 text-slate-400 focus:ring-0" 
                  onchange="toggleFrameSelect(${frame.id}, event)">
-          <span class="text-[10px] font-mono text-slate-400">#${frame.id + 1}</span>
+          <span class="text-[10px] font-mono text-slate-500">#${frame.id + 1}</span>
         </div>
-        <div onclick="inspectFrame(${frame.id})" class="text-center py-2 bg-slate-950 rounded border border-slate-900">
-          <div class="text-[11px] font-mono text-orange-400">${frame.timestamp}</div>
-          <div class="text-[9px] text-slate-500">Click to Inspect</div>
+        <div onclick="inspectFrame(${frame.id})" class="text-center py-1.5 bg-slate-900 rounded border border-slate-800">
+          <div class="text-[10px] font-mono text-slate-300 truncate">${frame.timestamp}</div>
         </div>
       `;
       grid.appendChild(thumb);
@@ -328,55 +536,154 @@
       }
     }
 
-    // --- DETAIL INSPECTOR & PIXEL HOVER ---
+    // --- SPATIAL THERMAL GRADIENT (Matches Python 3x3 Convolution: Center - Neighbor Avg) ---
     function computeGradient2D(matrix) {
       const rows = matrix.length;
       const cols = matrix[0].length;
-      let gradMag = Array.from({ length: rows }, () => new Array(cols).fill(0));
+      let grad = Array.from({ length: rows }, () => new Array(cols).fill(0));
 
       for (let r = 1; r < rows - 1; r++) {
         for (let c = 1; c < cols - 1; c++) {
-          let dx = (matrix[r][c + 1] - matrix[r][c - 1]) / 2.0;
-          let dy = (matrix[r + 1][c] - matrix[r - 1][c]) / 2.0;
-          gradMag[r][c] = Math.sqrt(dx * dx + dy * dy);
+          let sum = 0;
+          for (let dr = -1; dr <= 1; dr++) {
+            for (let dc = -1; dc <= 1; dc++) {
+              if (dr === 0 && dc === 0) continue;
+              sum += matrix[r + dr][c + dc];
+            }
+          }
+          const neighborAvg = sum / 8.0;
+          grad[r][c] = matrix[r][c] - neighborAvg;
         }
       }
-      return gradMag;
+      return grad;
     }
 
+    // --- INSPECT FRAME & CROSS-SECTION SLICE ---
     function inspectFrame(idx) {
+      activeInspectedIdx = idx;
       const frame = frameBuffer[idx];
       if (!frame) return;
 
       document.getElementById("inspectorPanel").classList.remove("hidden");
       document.getElementById("inspectorTimestamp").innerText = frame.timestamp;
 
-      const matrix = frame.matrix;
+      const matrix = frame.calibratedMatrix;
       const minBound = parseFloat(document.getElementById("cfgMinTemp").value);
       const maxBound = parseFloat(document.getElementById("cfgMaxTemp").value);
-      const gradMag = computeGradient2D(matrix);
+      const sensitivity = parseFloat(document.getElementById("cfgHotspotSensitivity").value);
 
+      const roi = detectHotspotROI(matrix, sensitivity);
+      const alertContainer = document.getElementById("hotspotAlert");
+
+      if (roi.hasHotspot) {
+        alertContainer.innerHTML = `
+          <span class="text-slate-200 font-mono">
+            HOTSPOT: Peak ${roi.peakTemp.toFixed(1)} deg C at (${roi.peakCoord.x}, ${roi.peakCoord.y})
+          </span>
+        `;
+      } else {
+        alertContainer.innerHTML = `<span class="text-slate-600 font-mono">NO HOTSPOT DETECTED</span>`;
+      }
+
+      // Calculate Spatial Gradient Matrix (T - Neighbor Avg)
+      const grad = computeGradient2D(matrix);
+
+      // Dynamic Scale Calculation for Single Frame (Matches Python: max_abs_val = max(|min|, |max|))
+      let gradMin = Infinity, gradMax = -Infinity;
+      grad.forEach(row => row.forEach(v => {
+        if (v < gradMin) gradMin = v;
+        if (v > gradMax) gradMax = v;
+      }));
+      const maxAbsVal = Math.max(Math.abs(gradMin), Math.abs(gradMax));
+      const vMin = -maxAbsVal;
+      const vMax = maxAbsVal;
+
+      const layoutShapes = roi.hasHotspot ? [{
+        type: 'rect',
+        x0: roi.bbox.x0 - 1,
+        y0: roi.bbox.y0 - 1,
+        x1: roi.bbox.x1 + 1,
+        y1: roi.bbox.y1 + 1,
+        line: { color: '#e2e8f0', width: 1.5 }
+      }] : [];
+
+      // 1. Radiometric Heatmap (Absolute deg C)
       Plotly.newPlot('thermalPlot', [{
         z: matrix,
         type: 'heatmap',
         colorscale: 'YlOrRd',
         zmin: minBound,
         zmax: maxBound,
-        hovertemplate: 'X: %{x}<br>Y: %{y}<br><b>Temp: %{z:.2f} °C</b><extra></extra>'
-      }], { margin: { t: 5, b: 5, l: 25, r: 5 }, paper_bgcolor: 'transparent', plot_bgcolor: 'transparent', font: { color: '#94a3b8' } });
+        hovertemplate: 'X: %{x}<br>Y: %{y}<br>Temp: %{z:.2f} deg C<extra></extra>'
+      }], { 
+        margin: { t: 5, b: 5, l: 25, r: 5 }, 
+        paper_bgcolor: 'transparent', 
+        plot_bgcolor: 'transparent', 
+        font: { color: '#94a3b8' },
+        shapes: layoutShapes
+      });
 
+      // 2. Spatial Thermal Gradient (Dynamically Scaled vMin to vMax around 0.0)
       Plotly.newPlot('gradientPlot', [{
-        z: gradMag,
+        z: grad,
         type: 'heatmap',
-        colorscale: 'Viridis',
-        hovertemplate: 'X: %{x}<br>Y: %{y}<br><b>|∇T|: %{z:.2f} °C/px</b><extra></extra>'
-      }], { margin: { t: 5, b: 5, l: 25, r: 5 }, paper_bgcolor: 'transparent', plot_bgcolor: 'transparent', font: { color: '#94a3b8' } });
+        colorscale: 'RdBu',
+        reversescale: true,
+        zmin: vMin,
+        zmax: vMax,
+        hovertemplate: 'X: %{x}<br>Y: %{y}<br>dT: %{z:.3f} deg C<extra></extra>'
+      }], { 
+        margin: { t: 5, b: 5, l: 25, r: 5 }, 
+        paper_bgcolor: 'transparent', 
+        plot_bgcolor: 'transparent', 
+        font: { color: '#94a3b8' } 
+      });
 
       const thermalPlotEl = document.getElementById('thermalPlot');
       thermalPlotEl.on('plotly_hover', function(data){
         const pt = data.points[0];
         document.getElementById("hoverCoords").innerText = `(${pt.x}, ${pt.y})`;
-        document.getElementById("hoverTemp").innerText = `${pt.z.toFixed(2)} °C`;
+        document.getElementById("hoverTemp").innerText = `${pt.z.toFixed(2)} deg C`;
+      });
+
+      updateLineProfile();
+    }
+
+    // --- 1D LINE PROFILE (CROSS-SECTION) RENDERER ---
+    function updateLineProfile() {
+      if (activeInspectedIdx === null) return;
+      const frame = frameBuffer[activeInspectedIdx];
+      if (!frame) return;
+
+      const matrix = frame.calibratedMatrix;
+      const orientation = document.getElementById("sliceOrientation").value;
+      let idx = parseInt(document.getElementById("sliceIndex").value);
+
+      let sliceData = [];
+      let axisLabels = [];
+
+      if (orientation === "horizontal") {
+        idx = Math.max(0, Math.min(matrix.length - 1, idx));
+        sliceData = matrix[idx];
+        axisLabels = sliceData.map((_, i) => i);
+      } else {
+        idx = Math.max(0, Math.min(matrix[0].length - 1, idx));
+        sliceData = matrix.map(row => row[idx]);
+        axisLabels = sliceData.map((_, i) => i);
+      }
+
+      Plotly.newPlot('lineProfilePlot', [{
+        x: axisLabels,
+        y: sliceData,
+        type: 'scatter',
+        mode: 'lines',
+        line: { color: '#cbd5e1', width: 1.5 }
+      }], {
+        margin: { t: 10, b: 25, l: 30, r: 10 },
+        paper_bgcolor: 'transparent',
+        plot_bgcolor: 'transparent',
+        xaxis: { title: orientation === 'horizontal' ? 'Pixel X' : 'Pixel Y', color: '#64748b' },
+        yaxis: { title: 'Temp (deg C)', color: '#64748b' }
       });
     }
 
@@ -387,54 +694,240 @@
       
       selectedFrames.forEach((frame) => {
         let csvContent = "data:text/csv;charset=utf-8,";
-        frame.matrix.forEach(row => {
+        frame.calibratedMatrix.forEach(row => {
           csvContent += row.map(val => val.toFixed(2)).join(",") + "\n";
         });
 
         const encodedUri = encodeURI(csvContent);
         const link = document.createElement("a");
         link.setAttribute("href", encodedUri);
-        link.setAttribute("download", `thermal_matrix_frame_${frame.id + 1}_${Date.now()}.csv`);
+        link.setAttribute("download", `thermal_frame_${frame.id + 1}_${Date.now()}.csv`);
         document.body.appendChild(link);
         link.click();
         document.body.removeChild(link);
       });
     }
 
+   // --- DUAL TWO-PASS GIF GENERATION (HEATMAP + SPATIAL GRADIENT) ---
     async function generateSelectedGIF() {
       if (selectedIndices.size < 2) return;
 
-      const gifContainer = document.getElementById("gifContainer");
-      const gifResultImg = document.getElementById("thermalGifResult");
-      gifContainer.classList.remove("hidden");
+      const selectedFrames = Array.from(selectedIndices).sort((a, b) => a - b).map(i => frameBuffer[i]);
+      
+      // ----------------------------------------------------
+      // PASS 1: Calculate Global Ranges Across Selected Frames
+      // ----------------------------------------------------
+      let globalMinTemp = Infinity;
+      let globalMaxTemp = -Infinity;
+      let batchGradMin = Infinity;
+      let batchGradMax = -Infinity;
 
-      const selectedFrames = Array.from(selectedIndices).sort((a,b) => a - b).map(i => frameBuffer[i]);
-      alert(`Compiling ${selectedFrames.length} selected frames into an animated GIF...`);
+      selectedFrames.forEach(f => {
+        // 1. Heatmap Temperature Min/Max
+        f.calibratedMatrix.forEach(row => row.forEach(v => {
+          if (v < globalMinTemp) globalMinTemp = v;
+          if (v > globalMaxTemp) globalMaxTemp = v;
+        }));
 
-      const gif = new GIF({
-        workers: 2,
-        quality: 10,
-        width: 600,
-        height: 400
+        // 2. Spatial Gradient Min/Max
+        const grad = computeGradient2D(f.calibratedMatrix);
+        grad.forEach(row => row.forEach(v => {
+          if (v < batchGradMin) batchGradMin = v;
+          if (v > batchGradMax) batchGradMax = v;
+        }));
       });
 
-      for (let i = 0; i < selectedFrames.length; i++) {
-        inspectFrame(selectedFrames[i].id);
-        const imgDataUrl = await Plotly.toImage('thermalPlot', { format: 'png', width: 600, height: 400 });
-        
-        const img = new Image();
-        img.src = imgDataUrl;
-        await new Promise(resolve => img.onload = resolve);
-        
-        gif.addFrame(img, { delay: 500 });
+      // Locked Bounds for Heatmap
+      const lockedMinTemp = Math.floor(globalMinTemp);
+      const lockedMaxTemp = Math.ceil(globalMaxTemp);
+
+      // Locked Bounds for Gradient (Centered at 0.0)
+      const globalMaxAbs = Math.max(Math.abs(batchGradMin), Math.abs(batchGradMax));
+      const lockedVMinGrad = -globalMaxAbs;
+      const lockedVMaxGrad = globalMaxAbs;
+
+      // Prepare Web Worker Blob for GIF.js to bypass CORS
+      let workerUrl = '';
+      try {
+        const workerResp = await fetch('https://cdnjs.cloudflare.com/ajax/libs/gif.js/0.2.0/gif.worker.js');
+        const workerBlob = await workerResp.blob();
+        workerUrl = URL.createObjectURL(workerBlob);
+      } catch (e) {
+        console.warn("GIF worker fetch fallback triggered:", e);
       }
 
-      gif.on('finished', function(blob) {
-        gifResultImg.src = URL.createObjectURL(blob);
+      const baseGifConfig = { quality: 10, width: 600, height: 400 };
+      if (workerUrl) {
+        baseGifConfig.workerScript = workerUrl;
+        baseGifConfig.workers = 2;
+      }
+
+      // Instantiate GIF compilers for both channels
+      const gifHeatmap = new GIF({ ...baseGifConfig });
+      const gifGradient = new GIF({ ...baseGifConfig });
+
+      // ----------------------------------------------------
+      // PASS 2: Render & Capture Locked-Scale Frames
+      // ----------------------------------------------------
+      for (let i = 0; i < selectedFrames.length; i++) {
+        const frame = selectedFrames[i];
+        const matrix = frame.calibratedMatrix;
+        const grad = computeGradient2D(matrix);
+
+        // 1. Render Locked Heatmap Frame
+        Plotly.newPlot('thermalPlot', [{
+          z: matrix,
+          type: 'heatmap',
+          colorscale: 'YlOrRd',
+          zmin: lockedMinTemp,
+          zmax: lockedMaxTemp,
+          hovertemplate: 'X: %{x}<br>Y: %{y}<br>Temp: %{z:.2f} deg C<extra></extra>'
+        }], { 
+          margin: { t: 5, b: 5, l: 25, r: 5 }, 
+          paper_bgcolor: 'transparent', 
+          plot_bgcolor: 'transparent', 
+          font: { color: '#94a3b8' } 
+        });
+
+        const heatmapImgUrl = await Plotly.toImage('thermalPlot', { format: 'png', width: 600, height: 400 });
+        const imgHeatmap = new Image();
+        imgHeatmap.src = heatmapImgUrl;
+        await new Promise(resolve => imgHeatmap.onload = resolve);
+        gifHeatmap.addFrame(imgHeatmap, { delay: 500 });
+
+        // 2. Render Locked Gradient Frame
+        Plotly.newPlot('gradientPlot', [{
+          z: grad,
+          type: 'heatmap',
+          colorscale: 'RdBu',
+          reversescale: true,
+          zmin: lockedVMinGrad,
+          zmax: lockedVMaxGrad,
+          hovertemplate: 'X: %{x}<br>Y: %{y}<br>dT: %{z:.3f} deg C<extra></extra>'
+        }], { 
+          margin: { t: 5, b: 5, l: 25, r: 5 }, 
+          paper_bgcolor: 'transparent', 
+          plot_bgcolor: 'transparent', 
+          font: { color: '#94a3b8' } 
+        });
+
+        const gradientImgUrl = await Plotly.toImage('gradientPlot', { format: 'png', width: 600, height: 400 });
+        const imgGradient = new Image();
+        imgGradient.src = gradientImgUrl;
+        await new Promise(resolve => imgGradient.onload = resolve);
+        gifGradient.addFrame(imgGradient, { delay: 500 });
+      }
+
+      // ----------------------------------------------------
+      // Output & Download Handlers
+      // ----------------------------------------------------
+      const timestamp = Date.now();
+
+      gifHeatmap.on('finished', function(blob) {
+        const blobUrl = URL.createObjectURL(blob);
+        const link = document.createElement("a");
+        link.href = blobUrl;
+        link.download = `thermal_heatmap_animation_${timestamp}.gif`;
+        document.body.appendChild(link);
+        link.click();
+        link.remove();
       });
 
-      gif.render();
+      gifGradient.on('finished', function(blob) {
+        const blobUrl = URL.createObjectURL(blob);
+        const link = document.createElement("a");
+        link.href = blobUrl;
+        link.download = `spatial_gradient_animation_${timestamp}.gif`;
+        document.body.appendChild(link);
+        link.click();
+        link.remove();
+      });
+
+      // Trigger compilation for both
+      gifHeatmap.render();
+      gifGradient.render();
     }
+    // --- UPDATE TEMPORAL T vs. TIME LINE GRAPH ---
+    function updateTemporalGraph() {
+      const graphPanel = document.getElementById("temporalGraphPanel");
+      graphPanel.classList.remove("hidden");
+
+      let times = [];
+      let temps = [];
+      let seriesLabel = "Mean Frame Temp";
+
+      if (temporalData.length > 0) {
+        times = temporalData.map(d => d.time);
+        temps = temporalData.map(d => d.temp);
+        seriesLabel = "Point Sp1";
+      } else if (frameBuffer.length > 0) {
+        frameBuffer.forEach((frame, idx) => {
+          times.push(idx + 1);
+          let sum = 0, count = 0;
+          frame.calibratedMatrix.forEach(r => r.forEach(v => { sum += v; count++; }));
+          temps.push(sum / count);
+        });
+      }
+
+      Plotly.newPlot('temporalPlot', [{
+        x: times,
+        y: temps,
+        type: 'scatter',
+        mode: 'lines',
+        name: seriesLabel,
+        line: { color: '#dc2626', width: 2 } // Solid red line matching Python output
+      }], {
+        title: {
+          text: 'Temperature Change at Target Point (Sp1) over Time',
+          font: { color: '#f1f5f9', size: 14, family: 'monospace' }
+        },
+        margin: { t: 40, b: 40, l: 50, r: 20 },
+        paper_bgcolor: 'transparent',
+        plot_bgcolor: 'transparent',
+        xaxis: { 
+          title: 'Relative Time (seconds)', 
+          color: '#94a3b8',
+          showgrid: true,
+          gridcolor: '#334155',
+          gridwidth: 1,
+          griddash: 'dash'
+        },
+        yaxis: { 
+          title: 'Temperature (deg C)', 
+          color: '#94a3b8',
+          showgrid: true,
+          gridcolor: '#334155',
+          gridwidth: 1,
+          griddash: 'dash'
+        }
+      });
+    }
+
+    // --- EXPORT TEMPERATURE CURVE CHART AS PNG / JPEG ---
+    async function exportTemperatureCurveImage() {
+      if (temporalData.length === 0 && frameBuffer.length === 0) {
+        alert("No temporal or frame data available to export.");
+        return;
+      }
+
+      // Ensure graph is fresh and up-to-date
+      updateTemporalGraph();
+
+      // Export high-resolution PNG image (1200x600)
+      const imgDataUrl = await Plotly.toImage('temporalPlot', {
+        format: 'png',
+        width: 1200,
+        height: 600
+      });
+
+      const downloadLink = document.createElement("a");
+      downloadLink.href = imgDataUrl;
+      downloadLink.download = `temperature_curve_${Date.now()}.png`;
+      document.body.appendChild(downloadLink);
+      downloadLink.click();
+      downloadLink.remove();
+    }
+  window.onload = initDatabase;
   </script>
 </body>
 </html>
