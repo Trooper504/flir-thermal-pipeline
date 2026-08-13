@@ -251,6 +251,8 @@ function updateBatchUI() {
 }
 
 // --- INSPECTION DASHBOARD ---
+// --- INSPECT FRAME WITH ISOTHERMAL MASK OVERLAY ---
+// --- INSPECT FRAME WITH DYNAMIC PALETTE SELECTION ---
 function inspectFrame(idx) {
   activeInspectedIdx = idx;
   const frame = frameBuffer[idx];
@@ -263,6 +265,10 @@ function inspectFrame(idx) {
   const minBound = parseFloat(document.getElementById("cfgMinTemp").value);
   const maxBound = parseFloat(document.getElementById("cfgMaxTemp").value);
   const sensitivity = parseFloat(document.getElementById("cfgHotspotSensitivity").value);
+
+  // Read Selected Palette Preferences
+  const heatmapPalette = document.getElementById("cfgHeatmapPalette")?.value || "YlOrRd";
+  const gradientPalette = document.getElementById("cfgGradientPalette")?.value || "RdBu";
 
   const roi = detectHotspotROI(matrix, sensitivity);
   const alertContainer = document.getElementById("hotspotAlert");
@@ -296,6 +302,41 @@ function inspectFrame(idx) {
   document.getElementById("tblStdDev").innerText = `${roi.stdDev.toFixed(2)} deg C`;
   document.getElementById("tblDeltaTVal").innerText = `${deltaT.toFixed(2)} deg C`;
 
+  // Isothermal Mask Processing
+  const isIsoEnabled = document.getElementById("chkEnableIso")?.checked || false;
+  const isoMin = parseFloat(document.getElementById("isoMinTemp")?.value) || 33.0;
+  const isoMax = parseFloat(document.getElementById("isoMaxTemp")?.value) || 35.0;
+  const isoColorChoice = document.getElementById("isoMaskColor")?.value || "magenta";
+
+  let heatmapTraces = [{
+    z: matrix,
+    type: 'heatmap',
+    colorscale: heatmapPalette, // Dynamic Heatmap Palette
+    zmin: minBound,
+    zmax: maxBound,
+    hovertemplate: 'X: %{x}<br>Y: %{y}<br>Temp: %{z:.2f} deg C<extra></extra>'
+  }];
+
+  if (isIsoEnabled) {
+    const isoResult = computeIsothermMask(matrix, isoMin, isoMax);
+    document.getElementById("lblIsoPixelCount").innerText = `${isoResult.matchCount} px`;
+    document.getElementById("lblIsoAreaPct").innerText = `${isoResult.areaPercentage.toFixed(2)} %`;
+
+    const colorHexMap = { magenta: '#ff00ff', cyan: '#00ffff', lime: '#00ff00' };
+    const targetColor = colorHexMap[isoColorChoice] || '#ff00ff';
+
+    heatmapTraces.push({
+      z: isoResult.maskMatrix,
+      type: 'heatmap',
+      colorscale: [[0, targetColor], [1, targetColor]],
+      showscale: false,
+      hovertemplate: 'X: %{x}<br>Y: %{y}<br><b>ISOTHERM: %{z:.2f} deg C</b><extra></extra>'
+    });
+  } else {
+    document.getElementById("lblIsoPixelCount").innerText = `0 px`;
+    document.getElementById("lblIsoAreaPct").innerText = `0.00 %`;
+  }
+
   const grad = computeGradient2D(matrix);
 
   let gradMin = Infinity, gradMax = -Infinity;
@@ -326,14 +367,8 @@ function inspectFrame(idx) {
     fillcolor: '#f43f5e', line: { color: '#ffffff', width: 1 }
   });
 
-  Plotly.newPlot('thermalPlot', [{
-    z: matrix,
-    type: 'heatmap',
-    colorscale: 'YlOrRd',
-    zmin: minBound,
-    zmax: maxBound,
-    hovertemplate: 'X: %{x}<br>Y: %{y}<br>Temp: %{z:.2f} deg C<extra></extra>'
-  }], { 
+  // Render Radiometric Heatmap
+  Plotly.newPlot('thermalPlot', heatmapTraces, { 
     margin: { t: 5, b: 5, l: 25, r: 5 }, 
     paper_bgcolor: 'transparent', 
     plot_bgcolor: 'transparent', 
@@ -341,11 +376,12 @@ function inspectFrame(idx) {
     shapes: layoutShapes
   });
 
+  // Render Spatial Gradient with Selected Palette
   Plotly.newPlot('gradientPlot', [{
     z: grad,
     type: 'heatmap',
-    colorscale: 'RdBu',
-    reversescale: true,
+    colorscale: gradientPalette, // Dynamic Gradient Palette
+    reversescale: gradientPalette === 'RdBu',
     zmin: -maxAbsVal,
     zmax: maxAbsVal,
     hovertemplate: 'X: %{x}<br>Y: %{y}<br>dT: %{z:.3f} deg C<extra></extra>'
@@ -356,10 +392,11 @@ function inspectFrame(idx) {
     font: { color: '#94a3b8' } 
   });
 
+  // Render 3D Surface Topography
   Plotly.newPlot('surface3DPlot', [{
     z: matrix,
     type: 'surface',
-    colorscale: 'YlOrRd',
+    colorscale: heatmapPalette, // Dynamic 3D Surface Palette
     cmin: minBound,
     cmax: maxBound,
     contours: {
@@ -444,6 +481,157 @@ function exportSelectedCSV() {
     link.click();
     document.body.removeChild(link);
   });
+}
+// --- STRUCTURED JSON REPORT EXPORTER ---
+async function exportLabReportJSON() {
+  if (activeInspectedIdx === null || !frameBuffer[activeInspectedIdx]) {
+    alert("Select a frame from the gallery to generate a lab report.");
+    return;
+  }
+
+  const frame = frameBuffer[activeInspectedIdx];
+  const matrix = frame.calibratedMatrix;
+  const sensitivity = parseFloat(document.getElementById("cfgHotspotSensitivity").value);
+  const emissivity = parseFloat(document.getElementById("cfgEmissivity").value);
+
+  const roi = detectHotspotROI(matrix, sensitivity);
+
+  // Read Differential Point Coordinates
+  const p1x = parseInt(document.getElementById("pt1X").value) || 0;
+  const p1y = parseInt(document.getElementById("pt1Y").value) || 0;
+  const p2x = parseInt(document.getElementById("pt2X").value) || 0;
+  const p2y = parseInt(document.getElementById("pt2Y").value) || 0;
+
+  const tempP1 = matrix[p1y] ? matrix[p1y][p1x] : 0;
+  const tempP2 = matrix[p2y] ? matrix[p2y][p2x] : 0;
+  const deltaT = Math.abs(tempP1 - tempP2);
+
+  // Read Isothermal Mask Metrics
+  const isIsoEnabled = document.getElementById("chkEnableIso")?.checked || false;
+  const isoMin = parseFloat(document.getElementById("isoMinTemp")?.value) || 33.0;
+  const isoMax = parseFloat(document.getElementById("isoMaxTemp")?.value) || 35.0;
+  const isoResult = isIsoEnabled ? computeIsothermMask(matrix, isoMin, isoMax) : null;
+
+  // Capture Base64 Rendered Images from Canvases
+  const heatmapImgUrl = await Plotly.toImage('thermalPlot', { format: 'png', width: 800, height: 500 });
+  const gradientImgUrl = await Plotly.toImage('gradientPlot', { format: 'png', width: 800, height: 500 });
+
+  const reportObject = {
+    reportMetadata: {
+      generatedAt: new Date().toISOString(),
+      softwareVersion: "FLIR Radiometric Processing Unit v2.4",
+      frameTimestamp: frame.timestamp,
+      frameIndex: frame.id + 1
+    },
+    radiometricParameters: {
+      emissivity: emissivity,
+      hotspotCutoffMultiplier: sensitivity,
+      matrixDimensions: { rows: matrix.length, cols: matrix[0].length }
+    },
+    statisticalSummary: {
+      minTemperatureDegC: parseFloat(roi.minTemp.toFixed(2)),
+      maxTemperatureDegC: parseFloat(roi.peakTemp.toFixed(2)),
+      meanTemperatureDegC: parseFloat(roi.meanTemp.toFixed(2)),
+      standardDeviationDegC: parseFloat(roi.stdDev.toFixed(2))
+    },
+    differentialPointAnalysis: {
+      point1: { x: p1x, y: p1y, temperatureDegC: parseFloat(tempP1.toFixed(2)) },
+      point2: { x: p2x, y: p2y, temperatureDegC: parseFloat(tempP2.toFixed(2)) },
+      deltaTDegC: parseFloat(deltaT.toFixed(2))
+    },
+    isothermalMaskAnalysis: {
+      enabled: isIsoEnabled,
+      temperatureRangeDegC: { min: isoMin, max: isoMax },
+      matchingPixelCount: isoResult ? isoResult.matchCount : 0,
+      surfaceAreaPercentage: isoResult ? parseFloat(isoResult.areaPercentage.toFixed(2)) : 0.0
+    },
+    renderedImageArtifacts: {
+      heatmapPngBase64: heatmapImgUrl,
+      spatialGradientPngBase64: gradientImgUrl
+    }
+  };
+
+  // Trigger JSON file download
+  const blob = new Blob([JSON.stringify(reportObject, null, 2)], { type: "application/json" });
+  const downloadLink = document.createElement("a");
+  downloadLink.href = URL.createObjectURL(blob);
+  downloadLink.download = `thermal_lab_report_frame_${frame.id + 1}_${Date.now()}.json`;
+  document.body.appendChild(downloadLink);
+  downloadLink.click();
+  downloadLink.remove();
+}
+
+// --- PRINTABLE HTML / PDF REPORT GENERATOR ---
+async function generatePrintableLabReport() {
+  if (activeInspectedIdx === null || !frameBuffer[activeInspectedIdx]) {
+    alert("Select a frame from the gallery to generate a lab report.");
+    return;
+  }
+
+  const frame = frameBuffer[activeInspectedIdx];
+  const matrix = frame.calibratedMatrix;
+  const sensitivity = parseFloat(document.getElementById("cfgHotspotSensitivity").value);
+  const emissivity = parseFloat(document.getElementById("cfgEmissivity").value);
+
+  const roi = detectHotspotROI(matrix, sensitivity);
+
+  const p1x = parseInt(document.getElementById("pt1X").value) || 0;
+  const p1y = parseInt(document.getElementById("pt1Y").value) || 0;
+  const p2x = parseInt(document.getElementById("pt2X").value) || 0;
+  const p2y = parseInt(document.getElementById("pt2Y").value) || 0;
+
+  const tempP1 = matrix[p1y] ? matrix[p1y][p1x] : 0;
+  const tempP2 = matrix[p2y] ? matrix[p2y][p2x] : 0;
+  const deltaT = Math.abs(tempP1 - tempP2);
+
+  const heatmapImgUrl = await Plotly.toImage('thermalPlot', { format: 'png', width: 600, height: 400 });
+  const gradientImgUrl = await Plotly.toImage('gradientPlot', { format: 'png', width: 600, height: 400 });
+
+  const reportWindow = window.open('', '_blank');
+  reportWindow.document.write(`
+    <!DOCTYPE html>
+    <html>
+    <head>
+      <title>Thermal Diagnostic Report - Frame ${frame.id + 1}</title>
+      <style>
+        body { font-family: monospace; padding: 20px; background: #ffffff; color: #1e293b; }
+        h1 { font-size: 18px; border-bottom: 2px solid #0f172a; padding-bottom: 8px; }
+        .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 20px; }
+        table { width: 100%; border-collapse: collapse; margin-top: 10px; font-size: 12px; }
+        th, td { border: 1px solid #cbd5e1; padding: 6px 10px; text-align: left; }
+        th { background: #f8fafc; }
+        img { width: 100%; border: 1px solid #cbd5e1; }
+      </style>
+    </head>
+    <body>
+      <h1>RADIOMETRIC THERMAL DIAGNOSTIC REPORT</h1>
+      <p><strong>Frame Identifier:</strong> ${frame.timestamp} | <strong>Emissivity:</strong> ${emissivity}</p>
+      
+      <table>
+        <tr><th>Metric</th><th>Value</th></tr>
+        <tr><td>Min Temperature</td><td>${roi.minTemp.toFixed(2)} deg C</td></tr>
+        <tr><td>Max Temperature (Peak)</td><td>${roi.peakTemp.toFixed(2)} deg C</td></tr>
+        <tr><td>Mean Temperature</td><td>${roi.meanTemp.toFixed(2)} deg C</td></tr>
+        <tr><td>Standard Deviation (sigma)</td><td>${roi.stdDev.toFixed(2)} deg C</td></tr>
+        <tr><td>Differential Delta T (P1 vs P2)</td><td>${deltaT.toFixed(2)} deg C</td></tr>
+      </table>
+
+      <div class="grid" style="margin-top: 20px;">
+        <div>
+          <h3>Radiometric Heatmap</h3>
+          <img src="${heatmapImgUrl}" />
+        </div>
+        <div>
+          <h3>Spatial Thermal Gradient</h3>
+          <img src="${gradientImgUrl}" />
+        </div>
+      </div>
+      
+      <script>window.onload = function() { window.print(); };<\/script>
+    </body>
+    </html>
+  `);
+  reportWindow.document.close();
 }
 
 window.onload = initDatabase;

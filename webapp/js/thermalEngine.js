@@ -112,6 +112,33 @@ function detectHotspotROI(matrix, sensitivityMultiplier = 2.0) {
   };
 }
 
+// --- ISOTHERMAL RANGE MASK COMPUTATION ---
+function computeIsothermMask(matrix, minTemp, maxTemp) {
+  const rows = matrix.length;
+  const cols = matrix[0].length;
+  const totalPixels = rows * cols;
+
+  let maskMatrix = Array.from({ length: rows }, () => new Array(cols).fill(null));
+  let matchCount = 0;
+
+  for (let r = 0; r < rows; r++) {
+    for (let c = 0; c < cols; c++) {
+      const val = matrix[r][c];
+      if (val >= minTemp && val <= maxTemp) {
+        maskMatrix[r][c] = val;
+        matchCount++;
+      }
+    }
+  }
+
+  const areaPercentage = (matchCount / totalPixels) * 100.0;
+
+  return {
+    maskMatrix: maskMatrix,
+    matchCount: matchCount,
+    areaPercentage: areaPercentage
+  };
+}
 // --- OFFLINE SIMULATION MATRIX GENERATOR ---
 function generateMockThermalMatrix(rows = 60, cols = 80) {
   let matrix = Array.from({ length: rows }, () => new Array(cols).fill(22.0));
