@@ -15,7 +15,7 @@
     <header class="flex justify-between items-center border-b border-slate-800 pb-4">
       <div>
         <h1 class="text-xl font-bold text-slate-100 tracking-wide">FLIR Radiometric Processing Unit</h1>
-        <p class="text-xs text-slate-400 font-mono">Edge Ingestion, Spatial Gradient Processing, and Line Profile Analysis</p>
+        <p class="text-xs text-slate-400 font-mono">Edge Ingestion, Spatial Gradient Processing, and Differential Analysis</p>
       </div>
       <div class="flex items-center gap-2">
         <span id="statusBadge" class="px-3 py-1 bg-slate-900 border border-slate-700 rounded text-xs font-mono text-slate-300">
@@ -40,7 +40,7 @@
                   class="w-full bg-slate-950 border border-slate-700 rounded px-2 py-1.5 text-slate-200 font-mono focus:outline-none focus:border-slate-500">
             <option value="simulation">Offline Simulation</option>
             <option value="pi">Live Pi API</option>
-            <option value="csv">Import CSV / TXT</option>
+            <option value="csv">Import CSV</option>
           </select>
         </div>
         <div>
@@ -54,12 +54,12 @@
                  class="w-full bg-slate-950 border border-slate-700 rounded px-2 py-1.5 text-slate-200 font-mono">
         </div>
         <div>
-          <label class="block text-slate-400 mb-1">Display Min ( deg C)</label>
+          <label class="block text-slate-400 mb-1">Display Min (deg C)</label>
           <input id="cfgMinTemp" type="number" step="1" value="15" onchange="replotActiveCanvas()"
                  class="w-full bg-slate-950 border border-slate-700 rounded px-2 py-1.5 text-slate-200 font-mono">
         </div>
         <div>
-          <label class="block text-slate-400 mb-1">Display Max ( deg C)</label>
+          <label class="block text-slate-400 mb-1">Display Max (deg C)</label>
           <input id="cfgMaxTemp" type="number" step="1" value="60" onchange="replotActiveCanvas()"
                  class="w-full bg-slate-950 border border-slate-700 rounded px-2 py-1.5 text-slate-200 font-mono">
         </div>
@@ -71,8 +71,8 @@
       </div>
 
       <div id="csvUploadContainer" class="hidden border-t border-slate-800 pt-3 mt-3">
-        <label class="block text-xs font-semibold text-slate-400 mb-1">Select CSV / TXT Files:</label>
-        <input id="csvFileInput" type="file" multiple accept=".csv, .txt" onchange="handleCsvFilesUpload(event)"
+        <label class="block text-xs font-semibold text-slate-400 mb-1">Select CSV Files:</label>
+        <input id="csvFileInput" type="file" multiple accept=".csv" onchange="handleCsvFilesUpload(event)"
                class="block w-full text-xs text-slate-400 file:mr-4 file:py-1 file:px-3 file:rounded file:border file:border-slate-700 file:text-xs file:bg-slate-800 file:text-slate-300 hover:file:bg-slate-700 cursor-pointer">
       </div>
     </div>
@@ -99,11 +99,8 @@
         <button onclick="exportSelectedCSV()" class="bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs px-3 py-1 rounded font-mono border border-slate-700 transition">
           EXPORT CSV
         </button>
-        <button onclick="exportTemperatureCurveImage()" class="bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs px-3 py-1 rounded font-mono border border-slate-700 transition">
-          EXPORT TEMP CURVE
-        </button>
         <button id="btnGenerateGif" onclick="generateSelectedGIF()" class="bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs px-3 py-1 rounded font-mono border border-slate-700 transition">
-          GENERATE GIF
+          GENERATE GIFS
         </button>
       </div>
     </div>
@@ -141,7 +138,68 @@
         </div>
       </div>
 
-      <!-- MAIN CANVASES -->
+      <!-- DIFFERENTIAL POINT INSPECTION TOOLBAR & STATS TABLE -->
+      <div class="bg-slate-900 p-4 rounded-lg border border-slate-800 space-y-3">
+        <div class="flex justify-between items-center border-b border-slate-800 pb-2">
+          <h3 class="text-xs font-bold font-mono text-slate-400">DIFFERENTIAL POINT INSPECTION (P1 vs P2)</h3>
+          <span class="text-[11px] text-slate-500 font-mono">Calculates Delta T = |T(P1) - T(P2)|</span>
+        </div>
+        
+        <div class="grid grid-cols-2 md:grid-cols-6 gap-4 text-xs font-mono">
+          <div>
+            <label class="block text-slate-500 mb-1">Point 1 X (P1_X)</label>
+            <input id="pt1X" type="number" value="20" min="0" onchange="replotActiveCanvas()" class="w-full bg-slate-950 border border-slate-800 text-slate-200 rounded px-2 py-1">
+          </div>
+          <div>
+            <label class="block text-slate-500 mb-1">Point 1 Y (P1_Y)</label>
+            <input id="pt1Y" type="number" value="20" min="0" onchange="replotActiveCanvas()" class="w-full bg-slate-950 border border-slate-800 text-slate-200 rounded px-2 py-1">
+          </div>
+          <div>
+            <label class="block text-slate-500 mb-1">Point 2 X (P2_X)</label>
+            <input id="pt2X" type="number" value="40" min="0" onchange="replotActiveCanvas()" class="w-full bg-slate-950 border border-slate-800 text-slate-200 rounded px-2 py-1">
+          </div>
+          <div>
+            <label class="block text-slate-500 mb-1">Point 2 Y (P2_Y)</label>
+            <input id="pt2Y" type="number" value="40" min="0" onchange="replotActiveCanvas()" class="w-full bg-slate-950 border border-slate-800 text-slate-200 rounded px-2 py-1">
+          </div>
+          <div>
+            <label class="block text-slate-500 mb-1">P1 Temperature</label>
+            <div id="lblP1Temp" class="bg-slate-950 border border-slate-800 text-slate-200 rounded px-2 py-1 font-bold">-- deg C</div>
+          </div>
+          <div>
+            <label class="block text-slate-500 mb-1">Delta T (P1 - P2)</label>
+            <div id="lblDeltaT" class="bg-slate-950 border border-slate-800 text-slate-200 rounded px-2 py-1 font-bold">-- deg C</div>
+          </div>
+        </div>
+
+        <!-- STATISTICAL SUMMARY TABLE -->
+        <div class="overflow-x-auto pt-2">
+          <table class="w-full text-left border-collapse text-xs font-mono text-slate-300">
+            <thead>
+              <tr class="border-b border-slate-800 text-slate-500 uppercase">
+                <th class="py-1 px-2">Metric</th>
+                <th class="py-1 px-2">Min Temp</th>
+                <th class="py-1 px-2">Max Temp</th>
+                <th class="py-1 px-2">Mean Temp</th>
+                <th class="py-1 px-2">Std Dev (sigma)</th>
+                <th class="py-1 px-2">Differential Delta T</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr class="border-b border-slate-800/50">
+                <td class="py-1.5 px-2 text-slate-400 font-bold">Value</td>
+                <td id="tblMinTemp" class="py-1.5 px-2">--</td>
+                <td id="tblMaxTemp" class="py-1.5 px-2">--</td>
+                <td id="tblMeanTemp" class="py-1.5 px-2">--</td>
+                <td id="tblStdDev" class="py-1.5 px-2">--</td>
+                <td id="tblDeltaTVal" class="py-1.5 px-2 font-bold text-slate-100">--</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- MAIN 2D CANVASES -->
       <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
         <div class="bg-slate-900 p-4 rounded-lg border border-slate-800">
           <h3 class="text-xs font-bold font-mono text-slate-400 mb-2">RADIOMETRIC HEATMAP (deg C)</h3>
@@ -153,7 +211,16 @@
         </div>
       </div>
 
-      <!-- SECTION 5: CROSS-SECTION SLICE ANALYZER -->
+      <!-- 3D THERMAL SURFACE TOPOGRAPHY -->
+      <div class="bg-slate-900 p-4 rounded-lg border border-slate-800 space-y-3">
+        <div class="flex justify-between items-center border-b border-slate-800 pb-2">
+          <h3 class="text-xs font-bold font-mono text-slate-400">3D THERMAL SURFACE TOPOGRAPHY</h3>
+          <span class="text-[11px] text-slate-500 font-mono">Interactive Orbit / Zoom</span>
+        </div>
+        <div id="surface3DPlot" class="w-full h-96"></div>
+      </div>
+
+      <!-- CROSS-SECTION SLICE ANALYZER -->
       <div class="bg-slate-900 p-4 rounded-lg border border-slate-800 space-y-3">
         <div class="flex justify-between items-center border-b border-slate-800 pb-2">
           <h3 class="text-xs font-bold font-mono text-slate-400">1D CROSS-SECTION PROFILE</h3>
@@ -172,762 +239,9 @@
     </div>
   </div>
 
-  <script>
-    let db = null;
-    let frameBuffer = [];
-    let selectedIndices = new Set();
-    let activeInspectedIdx = null;
-    let isImporting = false;
-    let importIntervalId = null;
-
-    // --- INDEXEDDB STORAGE ---
-    function initDatabase() {
-      const request = indexedDB.open("FlirThermalPipelineDB", 1);
-      request.onupgradeneeded = function(e) {
-        db = e.target.result;
-        if (!db.objectStoreNames.contains("frames")) {
-          db.createObjectStore("frames", { keyPath: "id" });
-        }
-      };
-      request.onsuccess = function(e) {
-        db = e.target.result;
-        loadFramesFromDatabase();
-      };
-    }
-
-    function saveFrameToDatabase(frameData) {
-      if (!db) return;
-      const tx = db.transaction("frames", "readwrite");
-      tx.objectStore("frames").put(frameData);
-    }
-
-    function loadFramesFromDatabase() {
-      if (!db) return;
-      const tx = db.transaction("frames", "readonly");
-      const request = tx.objectStore("frames").getAll();
-
-      request.onsuccess = function() {
-        const storedFrames = request.result;
-        if (storedFrames && storedFrames.length > 0) {
-          const currentEmissivity = parseFloat(document.getElementById("cfgEmissivity").value);
-          frameBuffer = storedFrames.map(f => {
-            f.calibratedMatrix = applyPlanckRecalibration(f.rawMatrix, currentEmissivity, 20.0, 0.95);
-            return f;
-          });
-
-          document.getElementById("lblFrameCount").innerText = frameBuffer.length;
-          document.getElementById("galleryGrid").innerHTML = "";
-          frameBuffer.forEach(f => appendThumbnailToGallery(f));
-        }
-      };
-    }
-
-    function clearDbAndGallery() {
-      if (confirm("Delete all stored frames from IndexedDB?")) {
-        if (db) {
-          const tx = db.transaction("frames", "readwrite");
-          tx.objectStore("frames").clear();
-        }
-        frameBuffer = [];
-        selectedIndices.clear();
-        activeInspectedIdx = null;
-        document.getElementById("galleryGrid").innerHTML = "";
-        document.getElementById("lblFrameCount").innerText = "0";
-        document.getElementById("inspectorPanel").classList.add("hidden");
-        updateBatchUI();
-      }
-    }
-
-    // --- CONTROL HANDLERS ---
-    function handleSourceChange() {
-      const source = document.getElementById("cfgDataSource").value;
-      const apiInput = document.getElementById("cfgApiUrl");
-      const csvContainer = document.getElementById("csvUploadContainer");
-      
-      if (source === "pi") {
-        apiInput.disabled = false;
-        apiInput.classList.remove("text-slate-600", "opacity-60");
-        apiInput.classList.add("text-slate-200");
-        csvContainer.classList.add("hidden");
-      } else if (source === "csv") {
-        apiInput.disabled = true;
-        apiInput.classList.add("text-slate-600", "opacity-60");
-        csvContainer.classList.remove("hidden");
-      } else {
-        apiInput.disabled = true;
-        apiInput.classList.add("text-slate-600", "opacity-60");
-        csvContainer.classList.add("hidden");
-      }
-    }
-
-    // --- CORRECT CSV PARSER (Splits strictly on semicolon ';') ---
-    async function handleCsvFilesUpload(event) {
-      const files = Array.from(event.target.files);
-      if (files.length === 0) return;
-
-      for (const file of files) {
-        const text = await file.text();
-        const matrix = parseFlirCsvText(text);
-        if (matrix && matrix.length > 0) {
-          const currentEmissivity = parseFloat(document.getElementById("cfgEmissivity").value);
-          const frameData = {
-            id: frameBuffer.length,
-            timestamp: file.name,
-            rawMatrix: matrix,
-            calibratedMatrix: applyPlanckRecalibration(matrix, currentEmissivity, 20.0, 0.95),
-            width: matrix[0].length,
-            height: matrix.length
-          };
-          frameBuffer.push(frameData);
-          saveFrameToDatabase(frameData);
-          appendThumbnailToGallery(frameData);
-        }
-      }
-      document.getElementById("lblFrameCount").innerText = frameBuffer.length;
-    }
-
-    function parseFlirCsvText(text) {
-      const lines = text.split(/\r?\n/);
-      let matrix = [];
-
-      lines.forEach(line => {
-        line = line.trim();
-        if (!line || line.startsWith('Файл:') || line.startsWith('File:')) return;
-
-        const parts = line.split(';');
-        let row = [];
-        parts.forEach(p => {
-          p = p.trim();
-          if (!p || p.startsWith('Кадр') || p.startsWith('Frame')) return;
-          const val = parseFloat(p.replace(',', '.'));
-          if (!isNaN(val)) row.push(val);
-        });
-        if (row.length > 0) matrix.push(row);
-      });
-      return matrix.length > 0 ? matrix : null;
-    }
-
-    // --- HOTSPOT ROI ENGINE ---
-    function detectHotspotROI(matrix, sensitivityMultiplier = 2.0) {
-      let sum = 0, count = 0;
-      let minVal = Infinity, maxVal = -Infinity;
-      let maxR = 0, maxC = 0;
-
-      for (let r = 0; r < matrix.length; r++) {
-        for (let c = 0; c < matrix[r].length; c++) {
-          const v = matrix[r][c];
-          sum += v;
-          count++;
-          if (v < minVal) minVal = v;
-          if (v > maxVal) { maxVal = v; maxR = r; maxC = c; }
-        }
-      }
-      const mean = sum / count;
-
-      let varianceSum = 0;
-      for (let r = 0; r < matrix.length; r++) {
-        for (let c = 0; c < matrix[r].length; c++) {
-          varianceSum += Math.pow(matrix[r][c] - mean, 2);
-        }
-      }
-      const stdDev = Math.sqrt(varianceSum / count);
-      const hotspotThreshold = mean + (sensitivityMultiplier * stdDev);
-
-      let minR = matrix.length, maxRow = 0;
-      let minC = matrix[0].length, maxCol = 0;
-      let hotspotPixelCount = 0;
-
-      for (let r = 0; r < matrix.length; r++) {
-        for (let c = 0; c < matrix[r].length; c++) {
-          if (matrix[r][c] >= hotspotThreshold) {
-            hotspotPixelCount++;
-            if (r < minR) minR = r;
-            if (r > maxRow) maxRow = r;
-            if (c < minC) minC = c;
-            if (c > maxCol) maxCol = c;
-          }
-        }
-      }
-
-      const hasHotspot = hotspotPixelCount > 5;
-      return {
-        hasHotspot,
-        threshold: hotspotThreshold,
-        peakTemp: maxVal,
-        peakCoord: { x: maxC, y: maxR },
-        bbox: hasHotspot ? { x0: minC, y0: minR, x1: maxCol, y1: maxRow } : null
-      };
-    }
-
-    // --- PLANCK RE-CALIBRATION ---
-    function applyPlanckRecalibration(matrix, newEmissivity, reflTempC = 20.0, baseEmissivity = 0.95) {
-      const e_target = parseFloat(newEmissivity);
-      const e_base = parseFloat(baseEmissivity);
-      const T_refl_K = parseFloat(reflTempC) + 273.15;
-
-      return matrix.map(row => row.map(tempC => {
-        const T_obj_K = tempC + 273.15;
-        const W_total = e_base * Math.pow(T_obj_K, 4) + (1.0 - e_base) * Math.pow(T_refl_K, 4);
-        const W_emitted = (W_total - (1.0 - e_target) * Math.pow(T_refl_K, 4)) / e_target;
-        const T_corrected_K = Math.pow(Math.max(0, W_emitted), 0.25);
-        return parseFloat((T_corrected_K - 273.15).toFixed(2));
-      }));
-    }
-
-    function triggerRecalibration() {
-      const targetEmissivity = parseFloat(document.getElementById("cfgEmissivity").value);
-      frameBuffer.forEach(frame => {
-        frame.calibratedMatrix = applyPlanckRecalibration(frame.rawMatrix, targetEmissivity, 20.0, 0.95);
-      });
-      if (activeInspectedIdx !== null) inspectFrame(activeInspectedIdx);
-    }
-
-    function replotActiveCanvas() {
-      if (activeInspectedIdx !== null) inspectFrame(activeInspectedIdx);
-    }
-
-    // --- MOCK DATA ---
-    function generateMockThermalMatrix(rows = 60, cols = 80) {
-      let matrix = Array.from({ length: rows }, () => new Array(cols).fill(22.0));
-      for (let r = 0; r < rows; r++) {
-        for (let c = 0; c < cols; c++) {
-          matrix[r][c] += Math.random() * 1.5;
-        }
-      }
-      const centerR = Math.floor(rows / 2);
-      const centerC = Math.floor(cols / 2);
-      const tempBoost = 18.0 + Math.random() * 5.0;
-
-      for (let r = centerR - 6; r <= centerR + 6; r++) {
-        for (let c = centerC - 8; c <= centerC + 8; c++) {
-          if (r >= 0 && r < rows && c >= 0 && c < cols) {
-            const dist = Math.sqrt(Math.pow(r - centerR, 2) + Math.pow(c - centerC, 2));
-            matrix[r][c] += Math.max(0, tempBoost - dist * 1.5);
-          }
-        }
-      }
-      return matrix;
-    }
-
-    // --- INGESTION ---
-    function startImportStream() {
-      isImporting = true;
-      document.getElementById("btnImport").disabled = true;
-      document.getElementById("btnImport").classList.add("opacity-50", "cursor-not-allowed");
-      
-      const stopBtn = document.getElementById("btnStop");
-      stopBtn.disabled = false;
-      stopBtn.classList.remove("opacity-50", "cursor-not-allowed", "text-slate-600");
-      stopBtn.classList.add("text-slate-200", "hover:bg-slate-900");
-
-      const sourceMode = document.getElementById("cfgDataSource").value;
-      document.getElementById("statusBadge").innerText = `INGESTING (${sourceMode.toUpperCase()})`;
-
-      importIntervalId = setInterval(ingestFrame, 1000);
-    }
-
-    function stopImportStream() {
-      isImporting = false;
-      if (importIntervalId) clearInterval(importIntervalId);
-
-      document.getElementById("btnImport").disabled = false;
-      document.getElementById("btnImport").classList.remove("opacity-50", "cursor-not-allowed");
-
-      const stopBtn = document.getElementById("btnStop");
-      stopBtn.disabled = true;
-      stopBtn.classList.add("opacity-50", "cursor-not-allowed", "text-slate-600");
-
-      document.getElementById("statusBadge").innerText = "SYSTEM IDLE";
-    }
-
-    async function ingestFrame() {
-      const sourceMode = document.getElementById("cfgDataSource").value;
-      let rawMatrix = null;
-      let width = 80, height = 60;
-
-      if (sourceMode === "pi") {
-        const url = document.getElementById("cfgApiUrl").value;
-        try {
-          const res = await fetch(url);
-          const json = await res.json();
-          rawMatrix = json.data;
-          width = json.width;
-          height = json.height;
-        } catch (err) {
-          console.error("Fetch error:", err);
-          return;
-        }
-      } else if (sourceMode === "simulation") {
-        rawMatrix = generateMockThermalMatrix(60, 80);
-      } else {
-        return;
-      }
-
-      const currentEmissivity = parseFloat(document.getElementById("cfgEmissivity").value);
-      const frameData = {
-        id: frameBuffer.length,
-        timestamp: new Date().toLocaleTimeString(),
-        rawMatrix: rawMatrix,
-        calibratedMatrix: applyPlanckRecalibration(rawMatrix, currentEmissivity, 20.0, 0.95),
-        width: width,
-        height: height
-      };
-      
-      frameBuffer.push(frameData);
-      saveFrameToDatabase(frameData);
-
-      document.getElementById("lblFrameCount").innerText = frameBuffer.length;
-      appendThumbnailToGallery(frameData);
-    }
-
-    function appendThumbnailToGallery(frame) {
-      const grid = document.getElementById("galleryGrid");
-      const thumb = document.createElement("div");
-      thumb.className = "bg-slate-950 border border-slate-800 p-2 rounded cursor-pointer hover:border-slate-600 transition";
-      
-      thumb.innerHTML = `
-        <div class="flex justify-between items-center mb-1">
-          <input type="checkbox" class="frame-checkbox rounded bg-slate-900 border-slate-700 text-slate-400 focus:ring-0" 
-                 onchange="toggleFrameSelect(${frame.id}, event)">
-          <span class="text-[10px] font-mono text-slate-500">#${frame.id + 1}</span>
-        </div>
-        <div onclick="inspectFrame(${frame.id})" class="text-center py-1.5 bg-slate-900 rounded border border-slate-800">
-          <div class="text-[10px] font-mono text-slate-300 truncate">${frame.timestamp}</div>
-        </div>
-      `;
-      grid.appendChild(thumb);
-    }
-
-    function toggleFrameSelect(idx, event) {
-      event.stopPropagation();
-      if (selectedIndices.has(idx)) {
-        selectedIndices.delete(idx);
-      } else {
-        selectedIndices.add(idx);
-      }
-      updateBatchUI();
-    }
-
-    function selectAllFrames() {
-      frameBuffer.forEach((_, idx) => selectedIndices.add(idx));
-      document.querySelectorAll('.frame-checkbox').forEach(cb => cb.checked = true);
-      updateBatchUI();
-    }
-
-    function updateBatchUI() {
-      const group = document.getElementById("batchActionGroup");
-      const countLbl = document.getElementById("lblSelectedCount");
-      const gifBtn = document.getElementById("btnGenerateGif");
-      
-      const count = selectedIndices.size;
-      countLbl.innerText = count;
-
-      if (count >= 1) {
-        group.classList.remove("hidden");
-        if (count >= 2) {
-          gifBtn.disabled = false;
-          gifBtn.classList.remove("opacity-50", "cursor-not-allowed");
-        } else {
-          gifBtn.disabled = true;
-          gifBtn.classList.add("opacity-50", "cursor-not-allowed");
-        }
-      } else {
-        group.classList.add("hidden");
-      }
-    }
-
-    // --- SPATIAL THERMAL GRADIENT (Matches Python 3x3 Convolution: Center - Neighbor Avg) ---
-    function computeGradient2D(matrix) {
-      const rows = matrix.length;
-      const cols = matrix[0].length;
-      let grad = Array.from({ length: rows }, () => new Array(cols).fill(0));
-
-      for (let r = 1; r < rows - 1; r++) {
-        for (let c = 1; c < cols - 1; c++) {
-          let sum = 0;
-          for (let dr = -1; dr <= 1; dr++) {
-            for (let dc = -1; dc <= 1; dc++) {
-              if (dr === 0 && dc === 0) continue;
-              sum += matrix[r + dr][c + dc];
-            }
-          }
-          const neighborAvg = sum / 8.0;
-          grad[r][c] = matrix[r][c] - neighborAvg;
-        }
-      }
-      return grad;
-    }
-
-    // --- INSPECT FRAME & CROSS-SECTION SLICE ---
-    function inspectFrame(idx) {
-      activeInspectedIdx = idx;
-      const frame = frameBuffer[idx];
-      if (!frame) return;
-
-      document.getElementById("inspectorPanel").classList.remove("hidden");
-      document.getElementById("inspectorTimestamp").innerText = frame.timestamp;
-
-      const matrix = frame.calibratedMatrix;
-      const minBound = parseFloat(document.getElementById("cfgMinTemp").value);
-      const maxBound = parseFloat(document.getElementById("cfgMaxTemp").value);
-      const sensitivity = parseFloat(document.getElementById("cfgHotspotSensitivity").value);
-
-      const roi = detectHotspotROI(matrix, sensitivity);
-      const alertContainer = document.getElementById("hotspotAlert");
-
-      if (roi.hasHotspot) {
-        alertContainer.innerHTML = `
-          <span class="text-slate-200 font-mono">
-            HOTSPOT: Peak ${roi.peakTemp.toFixed(1)} deg C at (${roi.peakCoord.x}, ${roi.peakCoord.y})
-          </span>
-        `;
-      } else {
-        alertContainer.innerHTML = `<span class="text-slate-600 font-mono">NO HOTSPOT DETECTED</span>`;
-      }
-
-      // Calculate Spatial Gradient Matrix (T - Neighbor Avg)
-      const grad = computeGradient2D(matrix);
-
-      // Dynamic Scale Calculation for Single Frame (Matches Python: max_abs_val = max(|min|, |max|))
-      let gradMin = Infinity, gradMax = -Infinity;
-      grad.forEach(row => row.forEach(v => {
-        if (v < gradMin) gradMin = v;
-        if (v > gradMax) gradMax = v;
-      }));
-      const maxAbsVal = Math.max(Math.abs(gradMin), Math.abs(gradMax));
-      const vMin = -maxAbsVal;
-      const vMax = maxAbsVal;
-
-      const layoutShapes = roi.hasHotspot ? [{
-        type: 'rect',
-        x0: roi.bbox.x0 - 1,
-        y0: roi.bbox.y0 - 1,
-        x1: roi.bbox.x1 + 1,
-        y1: roi.bbox.y1 + 1,
-        line: { color: '#e2e8f0', width: 1.5 }
-      }] : [];
-
-      // 1. Radiometric Heatmap (Absolute deg C)
-      Plotly.newPlot('thermalPlot', [{
-        z: matrix,
-        type: 'heatmap',
-        colorscale: 'YlOrRd',
-        zmin: minBound,
-        zmax: maxBound,
-        hovertemplate: 'X: %{x}<br>Y: %{y}<br>Temp: %{z:.2f} deg C<extra></extra>'
-      }], { 
-        margin: { t: 5, b: 5, l: 25, r: 5 }, 
-        paper_bgcolor: 'transparent', 
-        plot_bgcolor: 'transparent', 
-        font: { color: '#94a3b8' },
-        shapes: layoutShapes
-      });
-
-      // 2. Spatial Thermal Gradient (Dynamically Scaled vMin to vMax around 0.0)
-      Plotly.newPlot('gradientPlot', [{
-        z: grad,
-        type: 'heatmap',
-        colorscale: 'RdBu',
-        reversescale: true,
-        zmin: vMin,
-        zmax: vMax,
-        hovertemplate: 'X: %{x}<br>Y: %{y}<br>dT: %{z:.3f} deg C<extra></extra>'
-      }], { 
-        margin: { t: 5, b: 5, l: 25, r: 5 }, 
-        paper_bgcolor: 'transparent', 
-        plot_bgcolor: 'transparent', 
-        font: { color: '#94a3b8' } 
-      });
-
-      const thermalPlotEl = document.getElementById('thermalPlot');
-      thermalPlotEl.on('plotly_hover', function(data){
-        const pt = data.points[0];
-        document.getElementById("hoverCoords").innerText = `(${pt.x}, ${pt.y})`;
-        document.getElementById("hoverTemp").innerText = `${pt.z.toFixed(2)} deg C`;
-      });
-
-      updateLineProfile();
-    }
-
-    // --- 1D LINE PROFILE (CROSS-SECTION) RENDERER ---
-    function updateLineProfile() {
-      if (activeInspectedIdx === null) return;
-      const frame = frameBuffer[activeInspectedIdx];
-      if (!frame) return;
-
-      const matrix = frame.calibratedMatrix;
-      const orientation = document.getElementById("sliceOrientation").value;
-      let idx = parseInt(document.getElementById("sliceIndex").value);
-
-      let sliceData = [];
-      let axisLabels = [];
-
-      if (orientation === "horizontal") {
-        idx = Math.max(0, Math.min(matrix.length - 1, idx));
-        sliceData = matrix[idx];
-        axisLabels = sliceData.map((_, i) => i);
-      } else {
-        idx = Math.max(0, Math.min(matrix[0].length - 1, idx));
-        sliceData = matrix.map(row => row[idx]);
-        axisLabels = sliceData.map((_, i) => i);
-      }
-
-      Plotly.newPlot('lineProfilePlot', [{
-        x: axisLabels,
-        y: sliceData,
-        type: 'scatter',
-        mode: 'lines',
-        line: { color: '#cbd5e1', width: 1.5 }
-      }], {
-        margin: { t: 10, b: 25, l: 30, r: 10 },
-        paper_bgcolor: 'transparent',
-        plot_bgcolor: 'transparent',
-        xaxis: { title: orientation === 'horizontal' ? 'Pixel X' : 'Pixel Y', color: '#64748b' },
-        yaxis: { title: 'Temp (deg C)', color: '#64748b' }
-      });
-    }
-
-    // --- EXPORTS ---
-    function exportSelectedCSV() {
-      if (selectedIndices.size === 0) return;
-      const selectedFrames = Array.from(selectedIndices).map(i => frameBuffer[i]);
-      
-      selectedFrames.forEach((frame) => {
-        let csvContent = "data:text/csv;charset=utf-8,";
-        frame.calibratedMatrix.forEach(row => {
-          csvContent += row.map(val => val.toFixed(2)).join(",") + "\n";
-        });
-
-        const encodedUri = encodeURI(csvContent);
-        const link = document.createElement("a");
-        link.setAttribute("href", encodedUri);
-        link.setAttribute("download", `thermal_frame_${frame.id + 1}_${Date.now()}.csv`);
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
-      });
-    }
-
-   // --- DUAL TWO-PASS GIF GENERATION (HEATMAP + SPATIAL GRADIENT) ---
-    async function generateSelectedGIF() {
-      if (selectedIndices.size < 2) return;
-
-      const selectedFrames = Array.from(selectedIndices).sort((a, b) => a - b).map(i => frameBuffer[i]);
-      
-      // ----------------------------------------------------
-      // PASS 1: Calculate Global Ranges Across Selected Frames
-      // ----------------------------------------------------
-      let globalMinTemp = Infinity;
-      let globalMaxTemp = -Infinity;
-      let batchGradMin = Infinity;
-      let batchGradMax = -Infinity;
-
-      selectedFrames.forEach(f => {
-        // 1. Heatmap Temperature Min/Max
-        f.calibratedMatrix.forEach(row => row.forEach(v => {
-          if (v < globalMinTemp) globalMinTemp = v;
-          if (v > globalMaxTemp) globalMaxTemp = v;
-        }));
-
-        // 2. Spatial Gradient Min/Max
-        const grad = computeGradient2D(f.calibratedMatrix);
-        grad.forEach(row => row.forEach(v => {
-          if (v < batchGradMin) batchGradMin = v;
-          if (v > batchGradMax) batchGradMax = v;
-        }));
-      });
-
-      // Locked Bounds for Heatmap
-      const lockedMinTemp = Math.floor(globalMinTemp);
-      const lockedMaxTemp = Math.ceil(globalMaxTemp);
-
-      // Locked Bounds for Gradient (Centered at 0.0)
-      const globalMaxAbs = Math.max(Math.abs(batchGradMin), Math.abs(batchGradMax));
-      const lockedVMinGrad = -globalMaxAbs;
-      const lockedVMaxGrad = globalMaxAbs;
-
-      // Prepare Web Worker Blob for GIF.js to bypass CORS
-      let workerUrl = '';
-      try {
-        const workerResp = await fetch('https://cdnjs.cloudflare.com/ajax/libs/gif.js/0.2.0/gif.worker.js');
-        const workerBlob = await workerResp.blob();
-        workerUrl = URL.createObjectURL(workerBlob);
-      } catch (e) {
-        console.warn("GIF worker fetch fallback triggered:", e);
-      }
-
-      const baseGifConfig = { quality: 10, width: 600, height: 400 };
-      if (workerUrl) {
-        baseGifConfig.workerScript = workerUrl;
-        baseGifConfig.workers = 2;
-      }
-
-      // Instantiate GIF compilers for both channels
-      const gifHeatmap = new GIF({ ...baseGifConfig });
-      const gifGradient = new GIF({ ...baseGifConfig });
-
-      // ----------------------------------------------------
-      // PASS 2: Render & Capture Locked-Scale Frames
-      // ----------------------------------------------------
-      for (let i = 0; i < selectedFrames.length; i++) {
-        const frame = selectedFrames[i];
-        const matrix = frame.calibratedMatrix;
-        const grad = computeGradient2D(matrix);
-
-        // 1. Render Locked Heatmap Frame
-        Plotly.newPlot('thermalPlot', [{
-          z: matrix,
-          type: 'heatmap',
-          colorscale: 'YlOrRd',
-          zmin: lockedMinTemp,
-          zmax: lockedMaxTemp,
-          hovertemplate: 'X: %{x}<br>Y: %{y}<br>Temp: %{z:.2f} deg C<extra></extra>'
-        }], { 
-          margin: { t: 5, b: 5, l: 25, r: 5 }, 
-          paper_bgcolor: 'transparent', 
-          plot_bgcolor: 'transparent', 
-          font: { color: '#94a3b8' } 
-        });
-
-        const heatmapImgUrl = await Plotly.toImage('thermalPlot', { format: 'png', width: 600, height: 400 });
-        const imgHeatmap = new Image();
-        imgHeatmap.src = heatmapImgUrl;
-        await new Promise(resolve => imgHeatmap.onload = resolve);
-        gifHeatmap.addFrame(imgHeatmap, { delay: 500 });
-
-        // 2. Render Locked Gradient Frame
-        Plotly.newPlot('gradientPlot', [{
-          z: grad,
-          type: 'heatmap',
-          colorscale: 'RdBu',
-          reversescale: true,
-          zmin: lockedVMinGrad,
-          zmax: lockedVMaxGrad,
-          hovertemplate: 'X: %{x}<br>Y: %{y}<br>dT: %{z:.3f} deg C<extra></extra>'
-        }], { 
-          margin: { t: 5, b: 5, l: 25, r: 5 }, 
-          paper_bgcolor: 'transparent', 
-          plot_bgcolor: 'transparent', 
-          font: { color: '#94a3b8' } 
-        });
-
-        const gradientImgUrl = await Plotly.toImage('gradientPlot', { format: 'png', width: 600, height: 400 });
-        const imgGradient = new Image();
-        imgGradient.src = gradientImgUrl;
-        await new Promise(resolve => imgGradient.onload = resolve);
-        gifGradient.addFrame(imgGradient, { delay: 500 });
-      }
-
-      // ----------------------------------------------------
-      // Output & Download Handlers
-      // ----------------------------------------------------
-      const timestamp = Date.now();
-
-      gifHeatmap.on('finished', function(blob) {
-        const blobUrl = URL.createObjectURL(blob);
-        const link = document.createElement("a");
-        link.href = blobUrl;
-        link.download = `thermal_heatmap_animation_${timestamp}.gif`;
-        document.body.appendChild(link);
-        link.click();
-        link.remove();
-      });
-
-      gifGradient.on('finished', function(blob) {
-        const blobUrl = URL.createObjectURL(blob);
-        const link = document.createElement("a");
-        link.href = blobUrl;
-        link.download = `spatial_gradient_animation_${timestamp}.gif`;
-        document.body.appendChild(link);
-        link.click();
-        link.remove();
-      });
-
-      // Trigger compilation for both
-      gifHeatmap.render();
-      gifGradient.render();
-    }
-    // --- UPDATE TEMPORAL T vs. TIME LINE GRAPH ---
-    function updateTemporalGraph() {
-      const graphPanel = document.getElementById("temporalGraphPanel");
-      graphPanel.classList.remove("hidden");
-
-      let times = [];
-      let temps = [];
-      let seriesLabel = "Mean Frame Temp";
-
-      if (temporalData.length > 0) {
-        times = temporalData.map(d => d.time);
-        temps = temporalData.map(d => d.temp);
-        seriesLabel = "Point Sp1";
-      } else if (frameBuffer.length > 0) {
-        frameBuffer.forEach((frame, idx) => {
-          times.push(idx + 1);
-          let sum = 0, count = 0;
-          frame.calibratedMatrix.forEach(r => r.forEach(v => { sum += v; count++; }));
-          temps.push(sum / count);
-        });
-      }
-
-      Plotly.newPlot('temporalPlot', [{
-        x: times,
-        y: temps,
-        type: 'scatter',
-        mode: 'lines',
-        name: seriesLabel,
-        line: { color: '#dc2626', width: 2 } // Solid red line matching Python output
-      }], {
-        title: {
-          text: 'Temperature Change at Target Point (Sp1) over Time',
-          font: { color: '#f1f5f9', size: 14, family: 'monospace' }
-        },
-        margin: { t: 40, b: 40, l: 50, r: 20 },
-        paper_bgcolor: 'transparent',
-        plot_bgcolor: 'transparent',
-        xaxis: { 
-          title: 'Relative Time (seconds)', 
-          color: '#94a3b8',
-          showgrid: true,
-          gridcolor: '#334155',
-          gridwidth: 1,
-          griddash: 'dash'
-        },
-        yaxis: { 
-          title: 'Temperature (deg C)', 
-          color: '#94a3b8',
-          showgrid: true,
-          gridcolor: '#334155',
-          gridwidth: 1,
-          griddash: 'dash'
-        }
-      });
-    }
-
-    // --- EXPORT TEMPERATURE CURVE CHART AS PNG / JPEG ---
-    async function exportTemperatureCurveImage() {
-      if (temporalData.length === 0 && frameBuffer.length === 0) {
-        alert("No temporal or frame data available to export.");
-        return;
-      }
-
-      // Ensure graph is fresh and up-to-date
-      updateTemporalGraph();
-
-      // Export high-resolution PNG image (1200x600)
-      const imgDataUrl = await Plotly.toImage('temporalPlot', {
-        format: 'png',
-        width: 1200,
-        height: 600
-      });
-
-      const downloadLink = document.createElement("a");
-      downloadLink.href = imgDataUrl;
-      downloadLink.download = `temperature_curve_${Date.now()}.png`;
-      document.body.appendChild(downloadLink);
-      downloadLink.click();
-      downloadLink.remove();
-    }
-  window.onload = initDatabase;
-  </script>
+  <!-- Custom Application Modules -->
+  <script src="js/thermalEngine.js"></script>
+  <script src="js/gifEngine.js"></script>
+  <script src="js/app.js"></script>
 </body>
 </html>
