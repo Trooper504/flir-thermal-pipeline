@@ -32,7 +32,7 @@ flir-thermal-pipeline/
 * **Signed 3x3 Spatial Thermal Gradient:** Calculates local pixel temperature deviation ($T_{\text{center}} - \bar{T}_{\text{neighbors}}$) with symmetric dynamic scaling centered at $0.0\text{ °C}$.
 * **3D Thermal Topography Surface:** Renders radiometric matrices as interactive 3D surface plots with projected isothermal contour lines.
 * **Differential Point Inspection:** Real-time point-to-point temperature delta calculation ($\Delta T_{1-2} = |T(P_1) - T(P_2)|$).
-* **Isothermal Range Masking:** Highlights specific temperature bands ($T_{\text{iso\_min}} \le T \le T_{\text{iso\_max}}$) with high-contrast color overlays and calculates surface area percentage coverage.
+* **Isothermal Range Masking:** Highlights specific temperature bands (TIso_min and TIso_Max) with high-contrast color overlays and calculates surface area percentage coverage.
 * **Multi-Palette Colormap Selector:** On-the-fly switching between `YlOrRd`, `Jet/Ironbow`, `Greys`, `Viridis`, and `Coolwarm`.
 * **Dual Two-Pass GIF Compiler:** Scans selected batch sequences to lock global temperature bounds before compiling and downloading separate Heatmap and Spatial Gradient `.gif` animations.
 * **Structured JSON & PDF Report Exporter:** Export complete statistical frame reports with embedded Base64 canvas images or print formatted PDF diagnostic report cards.
