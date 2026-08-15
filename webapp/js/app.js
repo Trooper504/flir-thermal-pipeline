@@ -634,4 +634,101 @@ async function generatePrintableLabReport() {
   reportWindow.document.close();
 }
 
+// --- RUN ADVANCED PPT AND TSR ANALYSIS ---
+function runPptAnalysis() {
+  const framesToProcess = selectedIndices.size >= 3 
+    ? Array.from(selectedIndices).sort((a,b) => a - b).map(i => frameBuffer[i])
+    : frameBuffer;
+
+  const sequenceLength = framesToProcess.length;
+  const depthLbl = document.getElementById("lblSequenceDepth");
+  if (depthLbl) depthLbl.innerText = `${sequenceLength} frames`;
+
+  if (sequenceLength < 3) {
+    alert("PPT requires a sequence of at least 3 temporal frames (select frames or stream frames into buffer).");
+    return;
+  }
+
+  const freqBin = parseInt(document.getElementById("cfgFftBin")?.value) || 1;
+  const phasePalette = document.getElementById("cfgPhasePalette")?.value || "Viridis";
+
+  // 1. Compute PPT Phase and Amplitude
+  const ppt = computePptMaps(framesToProcess, freqBin);
+  if (ppt) {
+    Plotly.newPlot('pptPhasePlot', [{
+      z: ppt.phaseMatrix,
+      type: 'heatmap',
+      colorscale: phasePalette,
+      hovertemplate: 'X: %{x}<br>Y: %{y}<br>Phase: %{z:.3f} rad<extra></extra>'
+    }], {
+      margin: { t: 5, b: 5, l: 25, r: 5 },
+      paper_bgcolor: 'transparent',
+      plot_bgcolor: 'transparent',
+      font: { color: '#94a3b8' }
+    });
+
+    Plotly.newPlot('pptAmpPlot', [{
+      z: ppt.amplitudeMatrix,
+      type: 'heatmap',
+      colorscale: 'Hot',
+      hovertemplate: 'X: %{x}<br>Y: %{y}<br>Amplitude: %{z:.3f}<extra></extra>'
+    }], {
+      margin: { t: 5, b: 5, l: 25, r: 5 },
+      paper_bgcolor: 'transparent',
+      plot_bgcolor: 'transparent',
+      font: { color: '#94a3b8' }
+    });
+  }
+
+  // 2. Compute TSR & Time Derivatives at Point 1 (P1)
+  const p1x = parseInt(document.getElementById("pt1X")?.value) || 20;
+  const p1y = parseInt(document.getElementById("pt1Y")?.value) || 20;
+  const tsr = computeTsrDerivatives(framesToProcess, p1x, p1y);
+
+  if (tsr) {
+    Plotly.newPlot('tsrDerivativePlot', [
+      {
+        x: tsr.timeSteps,
+        y: tsr.tempSeries,
+        name: 'T(t) deg C',
+        type: 'scatter',
+        mode: 'lines+markers',
+        line: { color: '#f59e0b', width: 2 }
+      },
+      {
+        x: tsr.timeSteps,
+        y: tsr.firstDerivative,
+        name: '1st Deriv (dT/dt)',
+        type: 'scatter',
+        mode: 'lines',
+        line: { color: '#38bdf8', dash: 'dot', width: 1.5 },
+        yaxis: 'y2'
+      },
+      {
+        x: tsr.timeSteps,
+        y: tsr.secondDerivative,
+        name: '2nd Deriv (d2T/dt2)',
+        type: 'scatter',
+        mode: 'lines',
+        line: { color: '#ec4899', dash: 'dash', width: 1.5 },
+        yaxis: 'y2'
+      }
+    ], {
+      margin: { t: 10, b: 25, l: 40, r: 40 },
+      paper_bgcolor: 'transparent',
+      plot_bgcolor: 'transparent',
+      font: { color: '#94a3b8' },
+      xaxis: { title: 'Frame Sequence Index (t)', color: '#64748b' },
+      yaxis: { title: 'Temp (deg C)', color: '#f59e0b' },
+      yaxis2: {
+        title: 'Derivatives',
+        color: '#38bdf8',
+        overlaying: 'y',
+        side: 'right'
+      },
+      legend: { orientation: 'h', y: 1.15 }
+    });
+  }
+}
+
 window.onload = initDatabase;

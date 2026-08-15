@@ -161,3 +161,86 @@ function generateMockThermalMatrix(rows = 60, cols = 80) {
   }
   return matrix;
 }
+// --- PULSED PHASE THERMOGRAPHY (PPT) VIA 1D DISCRETE FOURIER TRANSFORM ---
+function computePptMaps(frameSequence, targetFreqBin = 1) {
+  const numFrames = frameSequence.length;
+  if (numFrames < 3) return null;
+
+  const rows = frameSequence[0].calibratedMatrix.length;
+  const cols = frameSequence[0].calibratedMatrix[0].length;
+
+  let phaseMatrix = Array.from({ length: rows }, () => new Array(cols).fill(0));
+  let ampMatrix = Array.from({ length: rows }, () => new Array(cols).fill(0));
+
+  const n = Math.min(targetFreqBin, Math.floor((numFrames - 1) / 2));
+  const twoPiN_over_N = (2.0 * Math.PI * n) / numFrames;
+
+  for (let r = 0; r < rows; r++) {
+    for (let c = 0; c < cols; c++) {
+      let realPart = 0.0;
+      let imagPart = 0.0;
+
+      for (let k = 0; k < numFrames; k++) {
+        const val = frameSequence[k].calibratedMatrix[r][c];
+        const angle = twoPiN_over_N * k;
+        realPart += val * Math.cos(angle);
+        imagPart -= val * Math.sin(angle);
+      }
+
+      realPart /= numFrames;
+      imagPart /= numFrames;
+
+      // Phase: phi = atan2(Im, Re)
+      phaseMatrix[r][c] = Math.atan2(imagPart, realPart);
+      // Amplitude: A = sqrt(Re^2 + Im^2)
+      ampMatrix[r][c] = Math.sqrt(realPart * realPart + imagPart * imagPart);
+    }
+  }
+
+  return {
+    frequencyBin: n,
+    totalFrames: numFrames,
+    phaseMatrix: phaseMatrix,
+    amplitudeMatrix: ampMatrix
+  };
+}
+
+// --- THERMAL SIGNAL RECONSTRUCTION (TSR) & TIME DERIVATIVES ---
+function computeTsrDerivatives(frameSequence, px, py) {
+  const numFrames = frameSequence.length;
+  if (numFrames < 3) return null;
+
+  let timeSteps = [];
+  let tempSeries = [];
+
+  for (let i = 0; i < numFrames; i++) {
+    timeSteps.push(i);
+    const m = frameSequence[i].calibratedMatrix;
+    const r = Math.max(0, Math.min(m.length - 1, py));
+    const c = Math.max(0, Math.min(m[0].length - 1, px));
+    tempSeries.push(m[r][c]);
+  }
+
+  // 1st Derivative: central difference dT/dt
+  let d1 = new Array(numFrames).fill(0);
+  for (let i = 1; i < numFrames - 1; i++) {
+    d1[i] = (tempSeries[i + 1] - tempSeries[i - 1]) / 2.0;
+  }
+  d1[0] = tempSeries[1] - tempSeries[0];
+  d1[numFrames - 1] = tempSeries[numFrames - 1] - tempSeries[numFrames - 2];
+
+  // 2nd Derivative: central difference d2T/dt2
+  let d2 = new Array(numFrames).fill(0);
+  for (let i = 1; i < numFrames - 1; i++) {
+    d2[i] = tempSeries[i + 1] - 2 * tempSeries[i] + tempSeries[i - 1];
+  }
+  d2[0] = d1[1] - d1[0];
+  d2[numFrames - 1] = d1[numFrames - 1] - d1[numFrames - 2];
+
+  return {
+    timeSteps: timeSteps,
+    tempSeries: tempSeries,
+    firstDerivative: d1,
+    secondDerivative: d2
+  };
+}

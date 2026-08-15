@@ -311,6 +311,58 @@
         <div id="lineProfilePlot" class="w-full h-48"></div>
       </div>
     </div>
+        <!-- ADVANCED NDT & TEMPORAL THERMOGRAPHY (PPT / TSR) -->
+    <div class="bg-slate-900 border border-slate-800 p-4 rounded-lg space-y-3">
+      <div class="flex justify-between items-center border-b border-slate-800 pb-2">
+        <h3 class="text-xs font-bold font-mono text-slate-400">TEMPORAL NDT ANALYSIS (PULSED PHASE THERMOGRAPHY & TSR)</h3>
+        <span class="text-[11px] text-slate-500 font-mono">Pixel-wise 1D-FFT &amp; Time Derivatives</span>
+      </div>
+
+      <div class="grid grid-cols-2 md:grid-cols-5 gap-4 text-xs font-mono">
+        <div>
+          <label class="block text-slate-500 mb-1">Temporal Frequency Bin ($f_n$)</label>
+          <input id="cfgFftBin" type="number" value="1" min="1" max="10" onchange="runPptAnalysis()" class="w-full bg-slate-950 border border-slate-800 text-slate-200 rounded px-2 py-1">
+        </div>
+        <div>
+          <label class="block text-slate-500 mb-1">Phase Map Colormap</label>
+          <select id="cfgPhasePalette" onchange="runPptAnalysis()" class="w-full bg-slate-950 border border-slate-800 text-slate-200 rounded px-2 py-1">
+            <option value="Viridis">Viridis</option>
+            <option value="RdBu">RdBu (Diverging)</option>
+            <option value="Jet">Jet</option>
+          </select>
+        </div>
+        <div>
+          <label class="block text-slate-500 mb-1">Sequence Depth</label>
+          <div id="lblSequenceDepth" class="bg-slate-950 border border-slate-800 text-slate-200 rounded px-2 py-1 font-bold">0 frames</div>
+        </div>
+        <div class="col-span-2 flex items-end">
+          <button onclick="runPptAnalysis()" class="w-full bg-slate-800 hover:bg-slate-700 text-slate-100 border border-slate-600 px-4 py-1.5 rounded text-xs font-mono transition">
+            COMPUTE PPT (PHASE &amp; AMPLITUDE)
+          </button>
+        </div>
+      </div>
+
+      <!-- NDT MAPS DISPLAY -->
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-4 pt-2">
+        <div class="bg-slate-950 p-3 rounded border border-slate-800">
+          <h4 class="text-[11px] font-bold font-mono text-slate-400 mb-2">PPT PHASE MAP ($\phi$ in Radians) — Subsurface Defects</h4>
+          <div id="pptPhasePlot" class="w-full h-72"></div>
+        </div>
+        <div class="bg-slate-950 p-3 rounded border border-slate-800">
+          <h4 class="text-[11px] font-bold font-mono text-slate-400 mb-2">PPT AMPLITUDE MAP ($A$ in Arbitrary Units)</h4>
+          <div id="pptAmpPlot" class="w-full h-72"></div>
+        </div>
+      </div>
+
+      <!-- TSR TEMPORAL EVOLUTION AND DERIVATIVE PLOTS -->
+      <div class="bg-slate-950 p-3 rounded border border-slate-800 mt-3">
+        <div class="flex justify-between items-center mb-2">
+          <h4 class="text-[11px] font-bold font-mono text-slate-400">TSR POINT PROFILE &amp; 1ST/2ND TIME DERIVATIVES ($P_1$)</h4>
+          <span class="text-[10px] text-slate-500 font-mono">Thermal Decay &amp; Inflection</span>
+        </div>
+        <div id="tsrDerivativePlot" class="w-full h-52"></div>
+      </div>
+    </div>
   </div>
 
   <!-- Custom Application Modules -->
