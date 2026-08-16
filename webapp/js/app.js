@@ -730,5 +730,61 @@ function runPptAnalysis() {
     });
   }
 }
+// --- PRINCIPAL COMPONENT THERMOGRAPHY (PCT) CONTROLLER ---
+function runPctAnalysis() {
+  const framesToProcess = selectedIndices.size >= 3 
+    ? Array.from(selectedIndices).sort((a,b) => a - b).map(i => frameBuffer[i])
+    : frameBuffer;
+
+  if (framesToProcess.length < 3) {
+    alert("PCT requires at least 3 temporal frames. Select frames from the gallery or stream data.");
+    return;
+  }
+
+  const selectedMode = parseInt(document.getElementById("cfgPctMode")?.value) || 2;
+  const palette = document.getElementById("cfgPctPalette")?.value || "Viridis";
+  const pctResult = computePctModes(framesToProcess, 3);
+
+  if (!pctResult) return;
+
+  const modeIdx = Math.min(selectedMode - 1, pctResult.eofSpatialMaps.length - 1);
+  const activeEof = pctResult.eofSpatialMaps[modeIdx];
+  const activeVariance = pctResult.varianceRatios[modeIdx];
+
+  // Update Variance Metric Readout
+  const varLbl = document.getElementById("lblPctVariance");
+  if (varLbl) varLbl.innerText = `${activeVariance.toFixed(2)} %`;
+
+  // 1. Render Active EOF Spatial Map
+  Plotly.newPlot('pctSpatialPlot', [{
+    z: activeEof,
+    type: 'heatmap',
+    colorscale: palette,
+    reversescale: palette === 'RdBu',
+    hovertemplate: 'X: %{x}<br>Y: %{y}<br>EOF Amplitude: %{z:.4f}<extra></extra>'
+  }], {
+    margin: { t: 5, b: 5, l: 25, r: 5 },
+    paper_bgcolor: 'transparent',
+    plot_bgcolor: 'transparent',
+    font: { color: '#94a3b8' }
+  });
+
+  // 2. Render Scree Spectrum Plot
+  Plotly.newPlot('pctScreePlot', [{
+    x: pctResult.varianceRatios.map((_, i) => `EOF ${i + 1}`),
+    y: pctResult.varianceRatios,
+    type: 'bar',
+    marker: {
+      color: pctResult.varianceRatios.map((_, i) => i === modeIdx ? '#38bdf8' : '#334155')
+    }
+  }], {
+    margin: { t: 15, b: 30, l: 35, r: 10 },
+    paper_bgcolor: 'transparent',
+    plot_bgcolor: 'transparent',
+    font: { color: '#94a3b8' },
+    xaxis: { title: 'Principal Component', color: '#64748b' },
+    yaxis: { title: 'Variance Explained (%)', color: '#64748b' }
+  });
+}
 
 window.onload = initDatabase;

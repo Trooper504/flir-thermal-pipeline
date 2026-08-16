@@ -244,3 +244,118 @@ function computeTsrDerivatives(frameSequence, px, py) {
     secondDerivative: d2
   };
 }
+// --- PRINCIPAL COMPONENT THERMOGRAPHY (PCT) ENGINE ---
+function computePctModes(frameSequence, maxComponents = 3) {
+  const numFrames = frameSequence.length;
+  if (numFrames < 3) return null;
+
+  const rows = frameSequence[0].calibratedMatrix.length;
+  const cols = frameSequence[0].calibratedMatrix[0].length;
+  const numPixels = rows * cols;
+  const kModes = Math.min(maxComponents, numFrames);
+
+  // 1. Flatten frames into Data Matrix A (M pixels x N time)
+  let A = Array.from({ length: numPixels }, () => new Array(numFrames).fill(0));
+  let temporalMeans = new Array(numPixels).fill(0);
+
+  for (let t = 0; t < numFrames; t++) {
+    const mat = frameSequence[t].calibratedMatrix;
+    for (let r = 0; r < rows; r++) {
+      for (let c = 0; c < cols; c++) {
+        const pIdx = r * cols + c;
+        const val = mat[r][c];
+        A[pIdx][t] = val;
+        temporalMeans[pIdx] += val;
+      }
+    }
+  }
+
+  // Subtract temporal mean per pixel (Mean-Centering)
+  for (let p = 0; p < numPixels; p++) {
+    temporalMeans[p] /= numFrames;
+    for (let t = 0; t < numFrames; t++) {
+      A[p][t] -= temporalMeans[p];
+    }
+  }
+
+  // 2. Compute Temporal Gram Matrix C = A^T * A (N x N)
+  let C = Array.from({ length: numFrames }, () => new Array(numFrames).fill(0));
+  for (let i = 0; i < numFrames; i++) {
+    for (let j = i; j < numFrames; j++) {
+      let sum = 0.0;
+      for (let p = 0; p < numPixels; p++) {
+        sum += A[p][i] * A[p][j];
+      }
+      C[i][j] = sum;
+      C[j][i] = sum;
+    }
+  }
+
+  // 3. Power-iteration / Deflation for the top k Eigenvectors of C
+  let eigenVectors = [];
+  let eigenValues = [];
+  let C_def = C.map(r => [...r]);
+
+  for (let m = 0; m < kModes; m++) {
+    let v = new Array(numFrames).fill(0).map(() => Math.random() - 0.5);
+    // Normalize initial vector
+    let norm = Math.sqrt(v.reduce((acc, x) => acc + x * x, 0)) || 1.0;
+    v = v.map(x => x / norm);
+
+    let lambda = 0.0;
+    for (let iter = 0; iter < 40; iter++) {
+      let v_next = new Array(numFrames).fill(0);
+      for (let i = 0; i < numFrames; i++) {
+        for (let j = 0; j < numFrames; j++) {
+          v_next[i] += C_def[i][j] * v[j];
+        }
+      }
+      norm = Math.sqrt(v_next.reduce((acc, x) => acc + x * x, 0));
+      if (norm < 1e-9) break;
+      lambda = norm;
+      v = v_next.map(x => x / norm);
+    }
+
+    eigenValues.push(lambda);
+    eigenVectors.push(v);
+
+    // Deflate matrix: C_def = C_def - lambda * (v * v^T)
+    for (let i = 0; i < numFrames; i++) {
+      for (let j = 0; j < numFrames; j++) {
+        C_def[i][j] -= lambda * v[i] * v[j];
+      }
+    }
+  }
+
+  // Total variance calculation
+  let traceC = 0.0;
+  for (let i = 0; i < numFrames; i++) traceC += C[i][i];
+  const varianceRatios = eigenValues.map(ev => traceC > 0 ? (ev / traceC) * 100.0 : 0.0);
+
+  // 4. Project spatial EOF Maps: U_m = A * v_m / sqrt(lambda_m)
+  let eofSpatialMaps = [];
+  for (let m = 0; m < kModes; m++) {
+    const v = eigenVectors[m];
+    const scale = eigenValues[m] > 1e-6 ? 1.0 / Math.sqrt(eigenValues[m]) : 1.0;
+    let spatialMap = Array.from({ length: rows }, () => new Array(cols).fill(0));
+
+    for (let r = 0; r < rows; r++) {
+      for (let c = 0; c < cols; c++) {
+        const pIdx = r * cols + c;
+        let proj = 0.0;
+        for (let t = 0; t < numFrames; t++) {
+          proj += A[pIdx][t] * v[t];
+        }
+        spatialMap[r][c] = proj * scale;
+      }
+    }
+    eofSpatialMaps.push(spatialMap);
+  }
+
+  return {
+    kModes: kModes,
+    eigenValues: eigenValues,
+    varianceRatios: varianceRatios,
+    eofSpatialMaps: eofSpatialMaps
+  };
+}

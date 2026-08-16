@@ -10,7 +10,7 @@
 </head>
 <body class="bg-slate-950 text-slate-100 font-sans p-6 min-h-screen">
 
-  <div class="max-w-7xl mx-auto space-y-6">
+  <div class="max-w-7xl mx-auto space-y-4">
     <!-- Header -->
     <header class="flex justify-between items-center border-b border-slate-800 pb-4">
       <div>
@@ -24,91 +24,95 @@
       </div>
     </header>
 
-    <!-- SECTION 1: SYSTEM CONFIGURATION -->
-    <div class="bg-slate-900 border border-slate-800 p-4 rounded-lg space-y-3">
-      <div class="flex justify-between items-center border-b border-slate-800 pb-2">
-        <h2 class="text-xs font-bold uppercase tracking-wider text-slate-400">
-          1. Radiometric Parameters and Ingestion
-        </h2>
+    <!-- SECTION 1: SYSTEM CONFIGURATION & PALETTE -->
+    <details class="group bg-slate-900 border border-slate-800 rounded-lg overflow-hidden" open>
+      <summary class="flex justify-between items-center p-4 cursor-pointer select-none bg-slate-900 hover:bg-slate-800/60 transition border-b border-transparent group-open:border-slate-800">
+        <div class="flex items-center gap-2">
+          <svg class="w-4 h-4 text-slate-400 transform transition-transform group-open:rotate-90" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
+          </svg>
+          <h2 class="text-xs font-bold uppercase tracking-wider text-slate-300 font-mono">
+            1. Radiometric Parameters & Ingestion
+          </h2>
+        </div>
         <span class="text-[11px] text-slate-500 font-mono">Storage: IndexedDB Active</span>
-      </div>
-      
-      <div class="grid grid-cols-2 md:grid-cols-6 gap-4 text-xs">
-        <div>
-          <label class="block text-slate-400 mb-1">Data Source</label>
-          <select id="cfgDataSource" onchange="handleSourceChange()" 
-                  class="w-full bg-slate-950 border border-slate-700 rounded px-2 py-1.5 text-slate-200 font-mono focus:outline-none focus:border-slate-500">
-            <option value="simulation">Offline Simulation</option>
-            <option value="pi">Live Pi API</option>
-            <option value="csv">Import CSV</option>
-          </select>
-        </div>
-        <div>
-          <label class="block text-slate-400 mb-1">Emissivity (e)</label>
-          <input id="cfgEmissivity" type="number" step="0.01" min="0.1" max="1.0" value="0.95" onchange="triggerRecalibration()"
-                 class="w-full bg-slate-950 border border-slate-700 rounded px-2 py-1.5 text-slate-200 font-mono">
-        </div>
-        <div>
-          <label class="block text-slate-400 mb-1">Hotspot Cutoff (k.s)</label>
-          <input id="cfgHotspotSensitivity" type="number" step="0.5" min="1.0" max="5.0" value="2.0" onchange="replotActiveCanvas()"
-                 class="w-full bg-slate-950 border border-slate-700 rounded px-2 py-1.5 text-slate-200 font-mono">
-        </div>
-        <div>
-          <label class="block text-slate-400 mb-1">Display Min (deg C)</label>
-          <input id="cfgMinTemp" type="number" step="1" value="15" onchange="replotActiveCanvas()"
-                 class="w-full bg-slate-950 border border-slate-700 rounded px-2 py-1.5 text-slate-200 font-mono">
-        </div>
-        <div>
-          <label class="block text-slate-400 mb-1">Display Max (deg C)</label>
-          <input id="cfgMaxTemp" type="number" step="1" value="60" onchange="replotActiveCanvas()"
-                 class="w-full bg-slate-950 border border-slate-700 rounded px-2 py-1.5 text-slate-200 font-mono">
-        </div>
-        <div>
-          <label class="block text-slate-400 mb-1">Pi Endpoint</label>
-          <input id="cfgApiUrl" type="text" value="http://localhost:8081/api/v1/thermal-frame" disabled
-                 class="w-full bg-slate-950 border border-slate-800 rounded px-2 py-1.5 text-slate-600 font-mono opacity-60">
-        </div>
-      </div>
+      </summary>
 
-      <div id="csvUploadContainer" class="hidden border-t border-slate-800 pt-3 mt-3">
-        <label class="block text-xs font-semibold text-slate-400 mb-1">Select CSV Files:</label>
-        <input id="csvFileInput" type="file" multiple accept=".csv" onchange="handleCsvFilesUpload(event)"
-               class="block w-full text-xs text-slate-400 file:mr-4 file:py-1 file:px-3 file:rounded file:border file:border-slate-700 file:text-xs file:bg-slate-800 file:text-slate-300 hover:file:bg-slate-700 cursor-pointer">
-      </div>
-      <!-- PALETTE SELECTOR TOOLBAR -->
-      <div class="bg-slate-900 p-4 rounded-lg border border-slate-800 space-y-3">
-        <div class="flex justify-between items-center border-b border-slate-800 pb-2">
-          <h3 class="text-xs font-bold font-mono text-slate-400">PALETTE & COLORMAP CONTROLS</h3>
-          <span class="text-[11px] text-slate-500 font-mono">Dynamic On-The-Fly Re-rendering</span>
-        </div>
-
-        <div class="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs font-mono">
+      <div class="p-4 space-y-4">
+        <div class="grid grid-cols-2 md:grid-cols-6 gap-4 text-xs font-mono">
           <div>
-            <label class="block text-slate-500 mb-1">Heatmap Colormap (Radiometric)</label>
-            <select id="cfgHeatmapPalette" onchange="replotActiveCanvas()" 
-                    class="w-full bg-slate-950 border border-slate-800 text-slate-200 rounded px-2 py-1.5 focus:outline-none focus:border-slate-600">
-              <option value="YlOrRd">YlOrRd (Standard Thermal)</option>
-              <option value="Jet">Jet / Ironbow (FLIR Rainbow)</option>
-              <option value="Hot">Hot (High-Brightness)</option>
-              <option value="Greys">Greys (Thermal Grayscale)</option>
-              <option value="Viridis">Viridis (Linear Perception)</option>
+            <label class="block text-slate-400 mb-1">Data Source</label>
+            <select id="cfgDataSource" onchange="handleSourceChange()" 
+                    class="w-full bg-slate-950 border border-slate-700 rounded px-2 py-1.5 text-slate-200 focus:outline-none focus:border-slate-500">
+              <option value="simulation">Offline Simulation</option>
+              <option value="pi">Live Pi API</option>
+              <option value="csv">Import CSV</option>
             </select>
           </div>
           <div>
-            <label class="block text-slate-500 mb-1">Gradient Colormap (dT Deviation)</label>
-            <select id="cfgGradientPalette" onchange="replotActiveCanvas()" 
-                    class="w-full bg-slate-950 border border-slate-800 text-slate-200 rounded px-2 py-1.5 focus:outline-none focus:border-slate-600">
-              <option value="RdBu">RdBu (Diverging Centered at 0.0)</option>
-              <option value="Coolwarm">Coolwarm (Blue-Red Deviation)</option>
-              <option value="Viridis">Viridis (Perceptually Uniform)</option>
-              <option value="Electric">Electric (High-Contrast Gradient)</option>
-            </select>
+            <label class="block text-slate-400 mb-1">Emissivity (e)</label>
+            <input id="cfgEmissivity" type="number" step="0.01" min="0.1" max="1.0" value="0.95" onchange="triggerRecalibration()"
+                   class="w-full bg-slate-950 border border-slate-700 rounded px-2 py-1.5 text-slate-200">
+          </div>
+          <div>
+            <label class="block text-slate-400 mb-1">Hotspot Cutoff (k.s)</label>
+            <input id="cfgHotspotSensitivity" type="number" step="0.5" min="1.0" max="5.0" value="2.0" onchange="replotActiveCanvas()"
+                   class="w-full bg-slate-950 border border-slate-700 rounded px-2 py-1.5 text-slate-200">
+          </div>
+          <div>
+            <label class="block text-slate-400 mb-1">Display Min (&deg;C)</label>
+            <input id="cfgMinTemp" type="number" step="1" value="15" onchange="replotActiveCanvas()"
+                   class="w-full bg-slate-950 border border-slate-700 rounded px-2 py-1.5 text-slate-200">
+          </div>
+          <div>
+            <label class="block text-slate-400 mb-1">Display Max (&deg;C)</label>
+            <input id="cfgMaxTemp" type="number" step="1" value="60" onchange="replotActiveCanvas()"
+                   class="w-full bg-slate-950 border border-slate-700 rounded px-2 py-1.5 text-slate-200">
+          </div>
+          <div>
+            <label class="block text-slate-400 mb-1">Pi Endpoint</label>
+            <input id="cfgApiUrl" type="text" value="http://localhost:8081/api/v1/thermal-frame" disabled
+                   class="w-full bg-slate-950 border border-slate-800 rounded px-2 py-1.5 text-slate-600 opacity-60">
+          </div>
+        </div>
+
+        <div id="csvUploadContainer" class="hidden border-t border-slate-800 pt-3">
+          <label class="block text-xs font-semibold text-slate-400 mb-1 font-mono">Select CSV Files:</label>
+          <input id="csvFileInput" type="file" multiple accept=".csv" onchange="handleCsvFilesUpload(event)"
+                 class="block w-full text-xs text-slate-400 file:mr-4 file:py-1 file:px-3 file:rounded file:border file:border-slate-700 file:text-xs file:bg-slate-800 file:text-slate-300 hover:file:bg-slate-700 cursor-pointer font-mono">
+        </div>
+
+        <!-- Palette Sub-Section -->
+        <div class="bg-slate-950 p-3 rounded border border-slate-800 space-y-2">
+          <span class="text-[11px] font-bold uppercase tracking-wider text-slate-400 font-mono">Palette & Colormap Controls</span>
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs font-mono">
+            <div>
+              <label class="block text-slate-500 mb-1">Heatmap Colormap (Radiometric)</label>
+              <select id="cfgHeatmapPalette" onchange="replotActiveCanvas()" 
+                      class="w-full bg-slate-900 border border-slate-800 text-slate-200 rounded px-2 py-1.5 focus:outline-none focus:border-slate-600">
+                <option value="YlOrRd">YlOrRd (Standard Thermal)</option>
+                <option value="Jet">Jet / Ironbow (FLIR Rainbow)</option>
+                <option value="Hot">Hot (High-Brightness)</option>
+                <option value="Greys">Greys (Thermal Grayscale)</option>
+                <option value="Viridis">Viridis (Linear Perception)</option>
+              </select>
+            </div>
+            <div>
+              <label class="block text-slate-500 mb-1">Gradient Colormap (dT Deviation)</label>
+              <select id="cfgGradientPalette" onchange="replotActiveCanvas()" 
+                      class="w-full bg-slate-900 border border-slate-800 text-slate-200 rounded px-2 py-1.5 focus:outline-none focus:border-slate-600">
+                <option value="RdBu">RdBu (Diverging Centered at 0.0)</option>
+                <option value="Coolwarm">Coolwarm (Blue-Red Deviation)</option>
+                <option value="Viridis">Viridis (Perceptually Uniform)</option>
+                <option value="Electric">Electric (High-Contrast Gradient)</option>
+              </select>
+            </div>
           </div>
         </div>
       </div>
-    </div>
+    </details>
 
-    <!-- SECTION 2: STREAM CONTROLS -->
+    <!-- SECTION 2: STREAM & BATCH CONTROLS (ALWAYS ACCESSIBLE) -->
     <div class="bg-slate-900 border border-slate-800 p-4 rounded-lg flex flex-wrap justify-between items-center gap-4">
       <div class="flex items-center gap-3">
         <button id="btnImport" onclick="startImportStream()" 
@@ -143,23 +147,34 @@
     </div>
 
     <!-- SECTION 3: STORED FRAMES GALLERY -->
-    <div class="bg-slate-900 border border-slate-800 p-4 rounded-lg space-y-3">
-      <div class="flex justify-between items-center border-b border-slate-800 pb-2">
-        <h2 class="text-xs font-bold uppercase tracking-wider text-slate-400">
-          Stored Frames (<span id="lblFrameCount" class="text-slate-200 font-mono">0</span>)
-        </h2>
-        <button onclick="selectAllFrames()" class="text-xs text-slate-400 hover:text-slate-200 font-mono">Select All</button>
+    <details class="group bg-slate-900 border border-slate-800 rounded-lg overflow-hidden" open>
+      <summary class="flex justify-between items-center p-4 cursor-pointer select-none bg-slate-900 hover:bg-slate-800/60 transition border-b border-transparent group-open:border-slate-800">
+        <div class="flex items-center gap-2">
+          <svg class="w-4 h-4 text-slate-400 transform transition-transform group-open:rotate-90" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
+          </svg>
+          <h2 class="text-xs font-bold uppercase tracking-wider text-slate-300 font-mono">
+            Stored Frames (<span id="lblFrameCount" class="text-slate-100 font-mono">0</span>)
+          </h2>
+        </div>
+        <button type="button" onclick="event.stopPropagation(); selectAllFrames();" class="text-xs text-slate-400 hover:text-slate-200 font-mono">
+          Select All
+        </button>
+      </summary>
+      <div class="p-4">
+        <div id="galleryGrid" class="grid grid-cols-2 md:grid-cols-6 gap-3 max-h-40 overflow-y-auto p-1">
+          <!-- Frame items populated by JS -->
+        </div>
       </div>
-      <div id="galleryGrid" class="grid grid-cols-2 md:grid-cols-6 gap-3 max-h-40 overflow-y-auto p-1">
-        <!-- Frame items -->
-      </div>
-    </div>
+    </details>
 
     <!-- SECTION 4: INSPECTOR DASHBOARD -->
     <div id="inspectorPanel" class="hidden space-y-4">
+      
+      <!-- Telemetry Status Bar -->
       <div class="bg-slate-900 border border-slate-800 p-3 rounded-lg flex flex-wrap justify-between items-center gap-4">
         <div class="flex items-center gap-3 text-xs font-mono">
-          <span class="text-slate-500">Frame:</span>
+          <span class="text-slate-500">Inspected Frame:</span>
           <span id="inspectorTimestamp" class="text-slate-200 font-bold">--</span>
         </div>
         <div id="hotspotAlert" class="text-xs font-mono">
@@ -170,198 +185,295 @@
             Coord: <span id="hoverCoords" class="text-slate-400">--</span>
           </div>
           <div class="bg-slate-950 px-2.5 py-1 border border-slate-800 rounded text-slate-200 font-bold">
-            Temp: <span id="hoverTemp">-- deg C</span>
+            Temp: <span id="hoverTemp">-- &deg;C</span>
           </div>
         </div>
-        <!-- ISOTHERMAL MASKING CONTROLS -->
-        <div class="bg-slate-900 p-4 rounded-lg border border-slate-800 space-y-3">
-          <div class="flex justify-between items-center border-b border-slate-800 pb-2">
-            <h3 class="text-xs font-bold font-mono text-slate-400">ISOTHERMAL RANGE MASKING</h3>
-            <div class="flex items-center gap-2">
-              <input id="chkEnableIso" type="checkbox" onchange="replotActiveCanvas()" class="rounded bg-slate-950 border-slate-700 text-slate-400">
-              <label for="chkEnableIso" class="text-xs font-mono text-slate-300">Enable Mask</label>
+      </div>
+
+      <!-- COLLAPSIBLE: 2D CANVASES & SPATIAL GRADIENT -->
+      <details class="group bg-slate-900 border border-slate-800 rounded-lg overflow-hidden" open>
+        <summary class="flex justify-between items-center p-4 cursor-pointer select-none bg-slate-900 hover:bg-slate-800/60 transition border-b border-transparent group-open:border-slate-800">
+          <div class="flex items-center gap-2">
+            <svg class="w-4 h-4 text-slate-400 transform transition-transform group-open:rotate-90" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
+            </svg>
+            <h3 class="text-xs font-bold font-mono text-slate-300">2D RADIOMETRIC HEATMAP & SPATIAL GRADIENT</h3>
+          </div>
+          <span class="text-[11px] text-slate-500 font-mono">2D Field View</span>
+        </summary>
+        <div class="p-4 grid grid-cols-1 md:grid-cols-2 gap-6">
+          <div class="bg-slate-950 p-3 rounded border border-slate-800">
+            <h4 class="text-xs font-bold font-mono text-slate-400 mb-2">RADIOMETRIC HEATMAP (&deg;C)</h4>
+            <div id="thermalPlot" class="w-full h-80"></div>
+          </div>
+          <div class="bg-slate-950 p-3 rounded border border-slate-800">
+            <h4 class="text-xs font-bold font-mono text-slate-400 mb-2">SPATIAL THERMAL GRADIENT (dT &deg;C)</h4>
+            <div id="gradientPlot" class="w-full h-80"></div>
+          </div>
+        </div>
+      </details>
+
+      <!-- COLLAPSIBLE: ISOTHERMAL RANGE MASKING -->
+      <details class="group bg-slate-900 border border-slate-800 rounded-lg overflow-hidden">
+        <summary class="flex justify-between items-center p-4 cursor-pointer select-none bg-slate-900 hover:bg-slate-800/60 transition border-b border-transparent group-open:border-slate-800">
+          <div class="flex items-center gap-2">
+            <svg class="w-4 h-4 text-slate-400 transform transition-transform group-open:rotate-90" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
+            </svg>
+            <h3 class="text-xs font-bold font-mono text-slate-300">ISOTHERMAL RANGE MASKING</h3>
+          </div>
+          <div class="flex items-center gap-2" onclick="event.stopPropagation()">
+            <input id="chkEnableIso" type="checkbox" onchange="replotActiveCanvas()" class="rounded bg-slate-950 border-slate-700 text-slate-400">
+            <label for="chkEnableIso" class="text-xs font-mono text-slate-300">Enable Mask</label>
+          </div>
+        </summary>
+        <div class="p-4 grid grid-cols-2 md:grid-cols-5 gap-4 text-xs font-mono">
+          <div>
+            <label class="block text-slate-500 mb-1">Iso Min (&deg;C)</label>
+            <input id="isoMinTemp" type="number" step="0.5" value="33.0" onchange="replotActiveCanvas()" class="w-full bg-slate-950 border border-slate-800 text-slate-200 rounded px-2 py-1">
+          </div>
+          <div>
+            <label class="block text-slate-500 mb-1">Iso Max (&deg;C)</label>
+            <input id="isoMaxTemp" type="number" step="0.5" value="35.0" onchange="replotActiveCanvas()" class="w-full bg-slate-950 border border-slate-800 text-slate-200 rounded px-2 py-1">
+          </div>
+          <div>
+            <label class="block text-slate-500 mb-1">Mask Pixels</label>
+            <div id="lblIsoPixelCount" class="bg-slate-950 border border-slate-800 text-slate-200 rounded px-2 py-1 font-bold">0 px</div>
+          </div>
+          <div>
+            <label class="block text-slate-500 mb-1">Surface Area Coverage</label>
+            <div id="lblIsoAreaPct" class="bg-slate-950 border border-slate-800 text-slate-200 rounded px-2 py-1 font-bold">0.00 %</div>
+          </div>
+          <div>
+            <label class="block text-slate-500 mb-1">Mask Color</label>
+            <select id="isoMaskColor" onchange="replotActiveCanvas()" class="w-full bg-slate-950 border border-slate-800 text-slate-200 rounded px-2 py-1 focus:outline-none">
+              <option value="magenta">Magenta (#ff00ff)</option>
+              <option value="cyan">Cyan (#00ffff)</option>
+              <option value="lime">Lime (#00ff00)</option>
+            </select>
+          </div>
+        </div>
+      </details>
+
+      <!-- COLLAPSIBLE: DIFFERENTIAL POINT INSPECTION & STATS TABLE -->
+      <details class="group bg-slate-900 border border-slate-800 rounded-lg overflow-hidden">
+        <summary class="flex justify-between items-center p-4 cursor-pointer select-none bg-slate-900 hover:bg-slate-800/60 transition border-b border-transparent group-open:border-slate-800">
+          <div class="flex items-center gap-2">
+            <svg class="w-4 h-4 text-slate-400 transform transition-transform group-open:rotate-90" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
+            </svg>
+            <h3 class="text-xs font-bold font-mono text-slate-300">DIFFERENTIAL POINT INSPECTION (P1 vs P2) &amp; STATS</h3>
+          </div>
+          <span class="text-[11px] text-slate-500 font-mono">Delta T = |T(P1) - T(P2)|</span>
+        </summary>
+        
+        <div class="p-4 space-y-4">
+          <div class="grid grid-cols-2 md:grid-cols-6 gap-4 text-xs font-mono">
+            <div>
+              <label class="block text-slate-500 mb-1">Point 1 X (P1_X)</label>
+              <input id="pt1X" type="number" value="20" min="0" onchange="replotActiveCanvas()" class="w-full bg-slate-950 border border-slate-800 text-slate-200 rounded px-2 py-1">
+            </div>
+            <div>
+              <label class="block text-slate-500 mb-1">Point 1 Y (P1_Y)</label>
+              <input id="pt1Y" type="number" value="20" min="0" onchange="replotActiveCanvas()" class="w-full bg-slate-950 border border-slate-800 text-slate-200 rounded px-2 py-1">
+            </div>
+            <div>
+              <label class="block text-slate-500 mb-1">Point 2 X (P2_X)</label>
+              <input id="pt2X" type="number" value="40" min="0" onchange="replotActiveCanvas()" class="w-full bg-slate-950 border border-slate-800 text-slate-200 rounded px-2 py-1">
+            </div>
+            <div>
+              <label class="block text-slate-500 mb-1">Point 2 Y (P2_Y)</label>
+              <input id="pt2Y" type="number" value="40" min="0" onchange="replotActiveCanvas()" class="w-full bg-slate-950 border border-slate-800 text-slate-200 rounded px-2 py-1">
+            </div>
+            <div>
+              <label class="block text-slate-500 mb-1">P1 Temperature</label>
+              <div id="lblP1Temp" class="bg-slate-950 border border-slate-800 text-slate-200 rounded px-2 py-1 font-bold">-- &deg;C</div>
+            </div>
+            <div>
+              <label class="block text-slate-500 mb-1">Delta T (P1 - P2)</label>
+              <div id="lblDeltaT" class="bg-slate-950 border border-slate-800 text-slate-200 rounded px-2 py-1 font-bold">-- &deg;C</div>
             </div>
           </div>
 
+          <!-- Statistical Summary Table -->
+          <div class="overflow-x-auto pt-2">
+            <table class="w-full text-left border-collapse text-xs font-mono text-slate-300">
+              <thead>
+                <tr class="border-b border-slate-800 text-slate-500 uppercase">
+                  <th class="py-1 px-2">Metric</th>
+                  <th class="py-1 px-2">Min Temp</th>
+                  <th class="py-1 px-2">Max Temp</th>
+                  <th class="py-1 px-2">Mean Temp</th>
+                  <th class="py-1 px-2">Std Dev (&sigma;)</th>
+                  <th class="py-1 px-2">Differential Delta T</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr class="border-b border-slate-800/50">
+                  <td class="py-1.5 px-2 text-slate-400 font-bold">Value</td>
+                  <td id="tblMinTemp" class="py-1.5 px-2">--</td>
+                  <td id="tblMaxTemp" class="py-1.5 px-2">--</td>
+                  <td id="tblMeanTemp" class="py-1.5 px-2">--</td>
+                  <td id="tblStdDev" class="py-1.5 px-2">--</td>
+                  <td id="tblDeltaTVal" class="py-1.5 px-2 font-bold text-slate-100">--</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </details>
+
+      <!-- COLLAPSIBLE: 3D THERMAL SURFACE TOPOGRAPHY -->
+      <details class="group bg-slate-900 border border-slate-800 rounded-lg overflow-hidden">
+        <summary class="flex justify-between items-center p-4 cursor-pointer select-none bg-slate-900 hover:bg-slate-800/60 transition border-b border-transparent group-open:border-slate-800">
+          <div class="flex items-center gap-2">
+            <svg class="w-4 h-4 text-slate-400 transform transition-transform group-open:rotate-90" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
+            </svg>
+            <h3 class="text-xs font-bold font-mono text-slate-300">3D THERMAL SURFACE TOPOGRAPHY</h3>
+          </div>
+          <span class="text-[11px] text-slate-500 font-mono">Interactive Orbit / Zoom</span>
+        </summary>
+        <div class="p-4">
+          <div id="surface3DPlot" class="w-full h-96"></div>
+        </div>
+      </details>
+
+      <!-- COLLAPSIBLE: CROSS-SECTION SLICE ANALYZER -->
+      <details class="group bg-slate-900 border border-slate-800 rounded-lg overflow-hidden">
+        <summary class="flex justify-between items-center p-4 cursor-pointer select-none bg-slate-900 hover:bg-slate-800/60 transition border-b border-transparent group-open:border-slate-800">
+          <div class="flex items-center gap-2">
+            <svg class="w-4 h-4 text-slate-400 transform transition-transform group-open:rotate-90" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
+            </svg>
+            <h3 class="text-xs font-bold font-mono text-slate-300">1D CROSS-SECTION PROFILE</h3>
+          </div>
+          <div class="flex items-center gap-3 text-xs font-mono" onclick="event.stopPropagation()">
+            <label class="text-slate-500">Direction:</label>
+            <select id="sliceOrientation" onchange="updateLineProfile()" class="bg-slate-950 border border-slate-800 text-slate-300 rounded px-2 py-1 focus:outline-none">
+              <option value="horizontal">Horizontal (X-Axis)</option>
+              <option value="vertical">Vertical (Y-Axis)</option>
+            </select>
+            <label class="text-slate-500">Idx:</label>
+            <input id="sliceIndex" type="number" value="120" min="0" onchange="updateLineProfile()" class="w-14 bg-slate-950 border border-slate-800 text-slate-300 rounded px-1.5 py-1 text-center">
+          </div>
+        </summary>
+        <div class="p-4">
+          <div id="lineProfilePlot" class="w-full h-48"></div>
+        </div>
+      </details>
+
+      <!-- COLLAPSIBLE: ADVANCED NDT & TEMPORAL THERMOGRAPHY -->
+      <details class="group bg-slate-900 border border-slate-800 rounded-lg overflow-hidden">
+        <summary class="flex justify-between items-center p-4 cursor-pointer select-none bg-slate-900 hover:bg-slate-800/60 transition border-b border-transparent group-open:border-slate-800">
+          <div class="flex items-center gap-2">
+            <svg class="w-4 h-4 text-slate-400 transform transition-transform group-open:rotate-90" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
+            </svg>
+            <h3 class="text-xs font-bold font-mono text-slate-300">TEMPORAL NDT ANALYSIS (PPT &amp; TSR DERIVATIVES)</h3>
+          </div>
+          <span class="text-[11px] text-slate-500 font-mono">Pixel-wise 1D-FFT</span>
+        </summary>
+        <div class="p-4 space-y-4">
           <div class="grid grid-cols-2 md:grid-cols-5 gap-4 text-xs font-mono">
             <div>
-              <label class="block text-slate-500 mb-1">Iso Min (deg C)</label>
-              <input id="isoMinTemp" type="number" step="0.5" value="33.0" onchange="replotActiveCanvas()" class="w-full bg-slate-950 border border-slate-800 text-slate-200 rounded px-2 py-1">
+              <label class="block text-slate-500 mb-1">Temporal Frequency Bin (f_n)</label>
+              <input id="cfgFftBin" type="number" value="1" min="1" max="10" onchange="runPptAnalysis()" class="w-full bg-slate-950 border border-slate-800 text-slate-200 rounded px-2 py-1">
             </div>
             <div>
-              <label class="block text-slate-500 mb-1">Iso Max (deg C)</label>
-              <input id="isoMaxTemp" type="number" step="0.5" value="35.0" onchange="replotActiveCanvas()" class="w-full bg-slate-950 border border-slate-800 text-slate-200 rounded px-2 py-1">
-            </div>
-            <div>
-              <label class="block text-slate-500 mb-1">Mask Pixels</label>
-              <div id="lblIsoPixelCount" class="bg-slate-950 border border-slate-800 text-slate-200 rounded px-2 py-1 font-bold">0 px</div>
-            </div>
-            <div>
-              <label class="block text-slate-500 mb-1">Surface Area Coverage</label>
-              <div id="lblIsoAreaPct" class="bg-slate-950 border border-slate-800 text-slate-200 rounded px-2 py-1 font-bold">0.00 %</div>
-            </div>
-            <div>
-              <label class="block text-slate-500 mb-1">Mask Color</label>
-              <select id="isoMaskColor" onchange="replotActiveCanvas()" class="w-full bg-slate-950 border border-slate-800 text-slate-200 rounded px-2 py-1 focus:outline-none">
-                <option value="magenta">Magenta (#ff00ff)</option>
-                <option value="cyan">Cyan (#00ffff)</option>
-                <option value="lime">Lime (#00ff00)</option>
+              <label class="block text-slate-500 mb-1">Phase Map Colormap</label>
+              <select id="cfgPhasePalette" onchange="runPptAnalysis()" class="w-full bg-slate-950 border border-slate-800 text-slate-200 rounded px-2 py-1">
+                <option value="Viridis">Viridis</option>
+                <option value="RdBu">RdBu (Diverging)</option>
+                <option value="Jet">Jet</option>
               </select>
             </div>
+            <div>
+              <label class="block text-slate-500 mb-1">Sequence Depth</label>
+              <div id="lblSequenceDepth" class="bg-slate-950 border border-slate-800 text-slate-200 rounded px-2 py-1 font-bold">0 frames</div>
+            </div>
+            <div class="col-span-2 flex items-end">
+              <button onclick="runPptAnalysis()" class="w-full bg-slate-800 hover:bg-slate-700 text-slate-100 border border-slate-600 px-4 py-1.5 rounded text-xs font-mono transition">
+                COMPUTE PPT (PHASE &amp; AMPLITUDE)
+              </button>
+            </div>
+          </div>
+
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-4 pt-2">
+            <div class="bg-slate-950 p-3 rounded border border-slate-800">
+              <h4 class="text-[11px] font-bold font-mono text-slate-400 mb-2">PPT PHASE MAP (&phi; in Radians) &mdash; Subsurface Defects</h4>
+              <div id="pptPhasePlot" class="w-full h-72"></div>
+            </div>
+            <div class="bg-slate-950 p-3 rounded border border-slate-800">
+              <h4 class="text-[11px] font-bold font-mono text-slate-400 mb-2">PPT AMPLITUDE MAP (A in Arbitrary Units)</h4>
+              <div id="pptAmpPlot" class="w-full h-72"></div>
+            </div>
+          </div>
+
+          <div class="bg-slate-950 p-3 rounded border border-slate-800 mt-3">
+            <div class="flex justify-between items-center mb-2">
+              <h4 class="text-[11px] font-bold font-mono text-slate-400">TSR POINT PROFILE &amp; 1ST/2ND TIME DERIVATIVES (P1)</h4>
+              <span class="text-[10px] text-slate-500 font-mono">Thermal Decay &amp; Inflection</span>
+            </div>
+            <div id="tsrDerivativePlot" class="w-full h-52"></div>
           </div>
         </div>
-      </div>
+      </details>
+      <!-- COLLAPSIBLE: PRINCIPAL COMPONENT THERMOGRAPHY (PCT) -->
+      <details class="group bg-slate-900 border border-slate-800 rounded-lg overflow-hidden">
+        <summary class="flex justify-between items-center p-4 cursor-pointer select-none bg-slate-900 hover:bg-slate-800/60 transition border-b border-transparent group-open:border-slate-800">
+          <div class="flex items-center gap-2">
+            <svg class="w-4 h-4 text-slate-400 transform transition-transform group-open:rotate-90" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
+            </svg>
+            <h3 class="text-xs font-bold font-mono text-slate-300">PRINCIPAL COMPONENT THERMOGRAPHY (PCT / SVD MODES)</h3>
+          </div>
+          <span class="text-[11px] text-slate-500 font-mono">Empirical Orthogonal Functions (EOF 1, 2, 3)</span>
+        </summary>
 
-      <!-- DIFFERENTIAL POINT INSPECTION TOOLBAR & STATS TABLE -->
-      <div class="bg-slate-900 p-4 rounded-lg border border-slate-800 space-y-3">
-        <div class="flex justify-between items-center border-b border-slate-800 pb-2">
-          <h3 class="text-xs font-bold font-mono text-slate-400">DIFFERENTIAL POINT INSPECTION (P1 vs P2)</h3>
-          <span class="text-[11px] text-slate-500 font-mono">Calculates Delta T = |T(P1) - T(P2)|</span>
-        </div>
-        
-        <div class="grid grid-cols-2 md:grid-cols-6 gap-4 text-xs font-mono">
-          <div>
-            <label class="block text-slate-500 mb-1">Point 1 X (P1_X)</label>
-            <input id="pt1X" type="number" value="20" min="0" onchange="replotActiveCanvas()" class="w-full bg-slate-950 border border-slate-800 text-slate-200 rounded px-2 py-1">
+        <div class="p-4 space-y-4">
+          <div class="grid grid-cols-1 md:grid-cols-4 gap-4 text-xs font-mono">
+            <div>
+              <label class="block text-slate-500 mb-1">Active EOF Component</label>
+              <select id="cfgPctMode" onchange="runPctAnalysis()" class="w-full bg-slate-950 border border-slate-800 text-slate-200 rounded px-2 py-1.5 focus:outline-none">
+                <option value="1">EOF 1 (Dominant Background Mode)</option>
+                <option value="2" selected>EOF 2 (Transient Anomaly Mode)</option>
+                <option value="3">EOF 3 (High-Frequency Diffusion Mode)</option>
+              </select>
+            </div>
+            <div>
+              <label class="block text-slate-500 mb-1">Color Palette</label>
+              <select id="cfgPctPalette" onchange="runPctAnalysis()" class="w-full bg-slate-950 border border-slate-800 text-slate-200 rounded px-2 py-1.5 focus:outline-none">
+                <option value="Viridis">Viridis</option>
+                <option value="RdBu">RdBu (Diverging)</option>
+                <option value="Jet">Jet</option>
+                <option value="Plasma">Plasma</option>
+              </select>
+            </div>
+            <div>
+              <label class="block text-slate-500 mb-1">Variance Explained</label>
+              <div id="lblPctVariance" class="bg-slate-950 border border-slate-800 text-slate-200 rounded px-2 py-1.5 font-bold">-- %</div>
+            </div>
+            <div class="flex items-end">
+              <button onclick="runPctAnalysis()" class="w-full bg-slate-800 hover:bg-slate-700 text-slate-100 border border-slate-600 px-4 py-1.5 rounded text-xs font-mono transition">
+                EXECUTE PCT SVD
+              </button>
+            </div>
           </div>
-          <div>
-            <label class="block text-slate-500 mb-1">Point 1 Y (P1_Y)</label>
-            <input id="pt1Y" type="number" value="20" min="0" onchange="replotActiveCanvas()" class="w-full bg-slate-950 border border-slate-800 text-slate-200 rounded px-2 py-1">
-          </div>
-          <div>
-            <label class="block text-slate-500 mb-1">Point 2 X (P2_X)</label>
-            <input id="pt2X" type="number" value="40" min="0" onchange="replotActiveCanvas()" class="w-full bg-slate-950 border border-slate-800 text-slate-200 rounded px-2 py-1">
-          </div>
-          <div>
-            <label class="block text-slate-500 mb-1">Point 2 Y (P2_Y)</label>
-            <input id="pt2Y" type="number" value="40" min="0" onchange="replotActiveCanvas()" class="w-full bg-slate-950 border border-slate-800 text-slate-200 rounded px-2 py-1">
-          </div>
-          <div>
-            <label class="block text-slate-500 mb-1">P1 Temperature</label>
-            <div id="lblP1Temp" class="bg-slate-950 border border-slate-800 text-slate-200 rounded px-2 py-1 font-bold">-- deg C</div>
-          </div>
-          <div>
-            <label class="block text-slate-500 mb-1">Delta T (P1 - P2)</label>
-            <div id="lblDeltaT" class="bg-slate-950 border border-slate-800 text-slate-200 rounded px-2 py-1 font-bold">-- deg C</div>
-          </div>
-        </div>
 
-        <!-- STATISTICAL SUMMARY TABLE -->
-        <div class="overflow-x-auto pt-2">
-          <table class="w-full text-left border-collapse text-xs font-mono text-slate-300">
-            <thead>
-              <tr class="border-b border-slate-800 text-slate-500 uppercase">
-                <th class="py-1 px-2">Metric</th>
-                <th class="py-1 px-2">Min Temp</th>
-                <th class="py-1 px-2">Max Temp</th>
-                <th class="py-1 px-2">Mean Temp</th>
-                <th class="py-1 px-2">Std Dev (sigma)</th>
-                <th class="py-1 px-2">Differential Delta T</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr class="border-b border-slate-800/50">
-                <td class="py-1.5 px-2 text-slate-400 font-bold">Value</td>
-                <td id="tblMinTemp" class="py-1.5 px-2">--</td>
-                <td id="tblMaxTemp" class="py-1.5 px-2">--</td>
-                <td id="tblMeanTemp" class="py-1.5 px-2">--</td>
-                <td id="tblStdDev" class="py-1.5 px-2">--</td>
-                <td id="tblDeltaTVal" class="py-1.5 px-2 font-bold text-slate-100">--</td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
-      </div>
-
-      <!-- MAIN 2D CANVASES -->
-      <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-        <div class="bg-slate-900 p-4 rounded-lg border border-slate-800">
-          <h3 class="text-xs font-bold font-mono text-slate-400 mb-2">RADIOMETRIC HEATMAP (deg C)</h3>
-          <div id="thermalPlot" class="w-full h-80"></div>
-        </div>
-        <div class="bg-slate-900 p-4 rounded-lg border border-slate-800">
-          <h3 class="text-xs font-bold font-mono text-slate-400 mb-2">SPATIAL THERMAL GRADIENT (dT deg C)</h3>
-          <div id="gradientPlot" class="w-full h-80"></div>
-        </div>
-      </div>
-
-      <!-- 3D THERMAL SURFACE TOPOGRAPHY -->
-      <div class="bg-slate-900 p-4 rounded-lg border border-slate-800 space-y-3">
-        <div class="flex justify-between items-center border-b border-slate-800 pb-2">
-          <h3 class="text-xs font-bold font-mono text-slate-400">3D THERMAL SURFACE TOPOGRAPHY</h3>
-          <span class="text-[11px] text-slate-500 font-mono">Interactive Orbit / Zoom</span>
-        </div>
-        <div id="surface3DPlot" class="w-full h-96"></div>
-      </div>
-
-      <!-- CROSS-SECTION SLICE ANALYZER -->
-      <div class="bg-slate-900 p-4 rounded-lg border border-slate-800 space-y-3">
-        <div class="flex justify-between items-center border-b border-slate-800 pb-2">
-          <h3 class="text-xs font-bold font-mono text-slate-400">1D CROSS-SECTION PROFILE</h3>
-          <div class="flex items-center gap-3 text-xs font-mono">
-            <label class="text-slate-500">Slice Direction:</label>
-            <select id="sliceOrientation" onchange="updateLineProfile()" class="bg-slate-950 border border-slate-800 text-slate-300 rounded px-2 py-1 focus:outline-none">
-              <option value="horizontal">Horizontal (X-Axis Slice)</option>
-              <option value="vertical">Vertical (Y-Axis Slice)</option>
-            </select>
-            <label class="text-slate-500">Index:</label>
-            <input id="sliceIndex" type="number" value="120" min="0" onchange="updateLineProfile()" class="w-16 bg-slate-950 border border-slate-800 text-slate-300 rounded px-2 py-1 text-center">
+          <!-- PCT Visualizations -->
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-4 pt-2">
+            <div class="bg-slate-950 p-3 rounded border border-slate-800">
+              <h4 class="text-[11px] font-bold font-mono text-slate-400 mb-2">PCT EIGEN-SURFACE MAP (EOF Spatial Mode)</h4>
+              <div id="pctSpatialPlot" class="w-full h-72"></div>
+            </div>
+            <div class="bg-slate-950 p-3 rounded border border-slate-800">
+              <h4 class="text-[11px] font-bold font-mono text-slate-400 mb-2">EIGENVALUE SPECTRUM (% Variance by Component)</h4>
+              <div id="pctScreePlot" class="w-full h-72"></div>
+            </div>
           </div>
         </div>
-        <div id="lineProfilePlot" class="w-full h-48"></div>
-      </div>
-    </div>
-        <!-- ADVANCED NDT & TEMPORAL THERMOGRAPHY (PPT / TSR) -->
-    <div class="bg-slate-900 border border-slate-800 p-4 rounded-lg space-y-3">
-      <div class="flex justify-between items-center border-b border-slate-800 pb-2">
-        <h3 class="text-xs font-bold font-mono text-slate-400">TEMPORAL NDT ANALYSIS (PULSED PHASE THERMOGRAPHY & TSR)</h3>
-        <span class="text-[11px] text-slate-500 font-mono">Pixel-wise 1D-FFT &amp; Time Derivatives</span>
-      </div>
-
-      <div class="grid grid-cols-2 md:grid-cols-5 gap-4 text-xs font-mono">
-        <div>
-          <label class="block text-slate-500 mb-1">Temporal Frequency Bin ($f_n$)</label>
-          <input id="cfgFftBin" type="number" value="1" min="1" max="10" onchange="runPptAnalysis()" class="w-full bg-slate-950 border border-slate-800 text-slate-200 rounded px-2 py-1">
-        </div>
-        <div>
-          <label class="block text-slate-500 mb-1">Phase Map Colormap</label>
-          <select id="cfgPhasePalette" onchange="runPptAnalysis()" class="w-full bg-slate-950 border border-slate-800 text-slate-200 rounded px-2 py-1">
-            <option value="Viridis">Viridis</option>
-            <option value="RdBu">RdBu (Diverging)</option>
-            <option value="Jet">Jet</option>
-          </select>
-        </div>
-        <div>
-          <label class="block text-slate-500 mb-1">Sequence Depth</label>
-          <div id="lblSequenceDepth" class="bg-slate-950 border border-slate-800 text-slate-200 rounded px-2 py-1 font-bold">0 frames</div>
-        </div>
-        <div class="col-span-2 flex items-end">
-          <button onclick="runPptAnalysis()" class="w-full bg-slate-800 hover:bg-slate-700 text-slate-100 border border-slate-600 px-4 py-1.5 rounded text-xs font-mono transition">
-            COMPUTE PPT (PHASE &amp; AMPLITUDE)
-          </button>
-        </div>
-      </div>
-
-      <!-- NDT MAPS DISPLAY -->
-      <div class="grid grid-cols-1 md:grid-cols-2 gap-4 pt-2">
-        <div class="bg-slate-950 p-3 rounded border border-slate-800">
-          <h4 class="text-[11px] font-bold font-mono text-slate-400 mb-2">PPT PHASE MAP ($\phi$ in Radians) — Subsurface Defects</h4>
-          <div id="pptPhasePlot" class="w-full h-72"></div>
-        </div>
-        <div class="bg-slate-950 p-3 rounded border border-slate-800">
-          <h4 class="text-[11px] font-bold font-mono text-slate-400 mb-2">PPT AMPLITUDE MAP ($A$ in Arbitrary Units)</h4>
-          <div id="pptAmpPlot" class="w-full h-72"></div>
-        </div>
-      </div>
-
-      <!-- TSR TEMPORAL EVOLUTION AND DERIVATIVE PLOTS -->
-      <div class="bg-slate-950 p-3 rounded border border-slate-800 mt-3">
-        <div class="flex justify-between items-center mb-2">
-          <h4 class="text-[11px] font-bold font-mono text-slate-400">TSR POINT PROFILE &amp; 1ST/2ND TIME DERIVATIVES ($P_1$)</h4>
-          <span class="text-[10px] text-slate-500 font-mono">Thermal Decay &amp; Inflection</span>
-        </div>
-        <div id="tsrDerivativePlot" class="w-full h-52"></div>
-      </div>
+      </details>
     </div>
   </div>
 
