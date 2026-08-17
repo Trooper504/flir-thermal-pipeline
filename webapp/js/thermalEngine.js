@@ -21,18 +21,65 @@ function parseFlirCsvText(text) {
 }
 
 // --- RADIOMETRIC PLANCK RE-CALIBRATION ---
-function applyPlanckRecalibration(matrix, newEmissivity, reflTempC = 20.0, baseEmissivity = 0.95) {
-  const e_target = parseFloat(newEmissivity);
-  const e_base = parseFloat(baseEmissivity);
-  const T_refl_K = parseFloat(reflTempC) + 273.15;
+// --- ASTM E1862/E1897 MULTI-PARAMETER RADIOMETRIC CALIBRATION ---
+function computeAtmosphericTransmission(distanceMeters, relativeHumidity, atmTempC) {
+  // Empirical water vapor partial pressure (Magnus-Tetens formulation)
+  const p_sat = 6.1078 * Math.pow(10, (7.5 * atmTempC) / (237.3 + atmTempC));
+  const p_h2o = (relativeHumidity / 100.0) * p_sat; // hPa
 
-  return matrix.map(row => row.map(tempC => {
-    const T_obj_K = tempC + 273.15;
-    const W_total = e_base * Math.pow(T_obj_K, 4) + (1.0 - e_base) * Math.pow(T_refl_K, 4);
-    const W_emitted = (W_total - (1.0 - e_target) * Math.pow(T_refl_K, 4)) / e_target;
-    const T_corrected_K = Math.pow(Math.max(0, W_emitted), 0.25);
+  // Empirical extinction coefficient for long-wave IR (8-14 um microbolometers)
+  const alpha = 0.0065;
+  const beta = 0.012;
+  const sqrt_H2O = Math.sqrt(Math.max(0.01, p_h2o));
+  const tau_atm = Math.exp(-Math.sqrt(Math.max(0.1, distanceMeters)) * (alpha + beta * sqrt_H2O));
+
+  return Math.min(1.0, Math.max(0.05, tau_atm));
+}
+
+function applyAstmCalibration(matrix, params) {
+  const {
+    emissivity = 0.95,
+    distanceMeters = 1.0,
+    relativeHumidity = 50.0,
+    atmTempC = 20.0,
+    reflTempC = 20.0,
+    winTrans = 1.0,
+    winTempC = 20.0,
+    baseEmissivity = 0.95
+  } = params;
+
+  const eps = Math.max(0.05, Math.min(1.0, parseFloat(emissivity)));
+  const eps_base = Math.max(0.05, Math.min(1.0, parseFloat(baseEmissivity)));
+  const tau_win = Math.max(0.05, Math.min(1.0, parseFloat(winTrans)));
+  const tau_atm = computeAtmosphericTransmission(distanceMeters, relativeHumidity, atmTempC);
+
+  const T_atm_K4 = Math.pow(parseFloat(atmTempC) + 273.15, 4);
+  const T_refl_K4 = Math.pow(parseFloat(reflTempC) + 273.15, 4);
+  const T_win_K4 = Math.pow(parseFloat(winTempC) + 273.15, 4);
+
+  const calibratedMatrix = matrix.map(row => row.map(tempC => {
+    const T_obj_raw_K4 = Math.pow(tempC + 273.15, 4);
+    
+    // Total raw radiant energy assumed by base camera calibration
+    const W_tot = eps_base * T_obj_raw_K4 + (1.0 - eps_base) * T_refl_K4;
+
+    // Isolate true target radiation by removing window, atmospheric, and reflection components
+    const W_obj_num = W_tot - (1.0 - eps) * tau_atm * tau_win * T_refl_K4
+                            - (1.0 - tau_atm) * tau_win * T_atm_K4
+                            - (1.0 - tau_win) * T_win_K4;
+
+    const W_obj_den = eps * tau_atm * tau_win;
+    const W_emitted = Math.max(0, W_obj_num / W_obj_den);
+    
+    const T_corrected_K = Math.pow(W_emitted, 0.25);
     return parseFloat((T_corrected_K - 273.15).toFixed(2));
   }));
+
+  return {
+    tau_atm: tau_atm,
+    total_opt_gain: tau_atm * tau_win,
+    calibratedMatrix: calibratedMatrix
+  };
 }
 
 // --- SPATIAL THERMAL GRADIENT (Center - Neighbor Avg Convolution) ---
@@ -243,6 +290,91 @@ function computeTsrDerivatives(frameSequence, px, py) {
     firstDerivative: d1,
     secondDerivative: d2
   };
+}
+// --- EDGE-PRESERVING 2D BILATERAL FILTER ---
+function applyBilateralFilter2D(matrix, radius = 2, sigmaSpace = 2.5, sigmaColor = 1.2) {
+  if (!matrix || matrix.length === 0) return matrix;
+  const rows = matrix.length;
+  const cols = matrix[0].length;
+  let filtered = Array.from({ length: rows }, () => new Array(cols).fill(0));
+
+  const twoSigmaSpaceSq = 2.0 * sigmaSpace * sigmaSpace;
+  const twoSigmaColorSq = 2.0 * sigmaColor * sigmaColor;
+
+  for (let r = 0; r < rows; r++) {
+    for (let c = 0; c < cols; c++) {
+      const centerVal = matrix[r][c];
+      let weightSum = 0.0;
+      let pixelSum = 0.0;
+
+      for (let dr = -radius; dr <= radius; dr++) {
+        for (let dc = -radius; dc <= radius; dc++) {
+          const nr = r + dr;
+          const nc = c + dc;
+
+          if (nr >= 0 && nr < rows && nc >= 0 && nc < cols) {
+            const neighborVal = matrix[nr][nc];
+            
+            // Spatial distance squared
+            const spatialDistSq = dr * dr + dc * dc;
+            // Radiometric intensity distance squared
+            const intensityDistSq = Math.pow(centerVal - neighborVal, 2);
+
+            // Bilateral weight product: w = exp(-d_s^2 / 2*s_s^2) * exp(-d_r^2 / 2*s_r^2)
+            const spatialWeight = Math.exp(-spatialDistSq / twoSigmaSpaceSq);
+            const colorWeight = Math.exp(-intensityDistSq / twoSigmaColorSq);
+            const weight = spatialWeight * colorWeight;
+
+            pixelSum += neighborVal * weight;
+            weightSum += weight;
+          }
+        }
+      }
+      filtered[r][c] = parseFloat((pixelSum / (weightSum || 1.0)).toFixed(2));
+    }
+  }
+  return filtered;
+}
+
+// --- ADAPTIVE EMISSIVITY MATRIX GENERATOR ---
+function generateEmissivityMatrix(rawMatrix, zones = [], defaultEmissivity = 0.95) {
+  const rows = rawMatrix.length;
+  const cols = rawMatrix[0].length;
+  const defaultEps = Math.max(0.05, Math.min(1.0, parseFloat(defaultEmissivity) || 0.95));
+
+  let epsMatrix = Array.from({ length: rows }, () => new Array(cols).fill(defaultEps));
+
+  for (let r = 0; r < rows; r++) {
+    for (let c = 0; c < cols; c++) {
+      const temp = rawMatrix[r][c];
+      // Check if pixel falls inside any defined material zone
+      for (const zone of zones) {
+        if (temp >= zone.minTemp && temp <= zone.maxTemp) {
+          epsMatrix[r][c] = zone.emissivity;
+          break; // First matching zone takes precedence
+        }
+      }
+    }
+  }
+  return epsMatrix;
+}
+
+// --- RADIOMETRIC INVERSION WITH SPATIALLY-VARYING EMISSIVITY ---
+function applyZonedRadiometricCorrection(matrix, epsMatrix, reflTempC = 20.0, baseEmissivity = 0.95) {
+  const eps_base = Math.max(0.05, Math.min(1.0, parseFloat(baseEmissivity) || 0.95));
+  const T_refl_K4 = Math.pow((parseFloat(reflTempC) || 20.0) + 273.15, 4);
+
+  return matrix.map((row, r) => row.map((tempC, c) => {
+    const eps_local = epsMatrix[r] ? epsMatrix[r][c] : 0.95;
+    const T_app_K4 = Math.pow(tempC + 273.15, 4);
+
+    // Stefan-Boltzmann energy balance: W_tot = eps_base * T_raw^4 + (1 - eps_base) * T_refl^4
+    const W_tot = eps_base * T_app_K4 + (1.0 - eps_base) * T_refl_K4;
+    const W_obj = (W_tot - (1.0 - eps_local) * T_refl_K4) / Math.max(0.01, eps_local);
+
+    const T_corrected_K = Math.pow(Math.max(0, W_obj), 0.25);
+    return parseFloat((T_corrected_K - 273.15).toFixed(2));
+  }));
 }
 // --- PRINCIPAL COMPONENT THERMOGRAPHY (PCT) ENGINE ---
 function computePctModes(frameSequence, maxComponents = 3) {

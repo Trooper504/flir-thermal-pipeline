@@ -34,9 +34,8 @@ function loadFramesFromDatabase() {
   request.onsuccess = function() {
     const storedFrames = request.result;
     if (storedFrames && storedFrames.length > 0) {
-      const currentEmissivity = parseFloat(document.getElementById("cfgEmissivity").value);
       frameBuffer = storedFrames.map(f => {
-        f.calibratedMatrix = applyPlanckRecalibration(f.rawMatrix, currentEmissivity, 20.0, 0.95);
+        f.calibratedMatrix = calibrateFrameMatrix(f.rawMatrix);
         return f;
       });
 
@@ -62,7 +61,109 @@ function clearDbAndGallery() {
     updateBatchUI();
   }
 }
+// --- ADAPTIVE EMISSIVITY ZONES STATE & CONTROLS ---
+let activeEmissivityZones = [];
 
+function addEmissivityZone() {
+  const nameInput = document.getElementById("zoneName");
+  const minInput = document.getElementById("zoneMinTemp");
+  const maxInput = document.getElementById("zoneMaxTemp");
+  const epsInput = document.getElementById("zoneEmissivity");
+
+  const name = nameInput.value.trim() || `Zone ${activeEmissivityZones.length + 1}`;
+  const minTemp = parseFloat(minInput.value);
+  const maxTemp = parseFloat(maxInput.value);
+  const emissivity = parseFloat(epsInput.value);
+
+  if (isNaN(minTemp) || isNaN(maxTemp) || isNaN(emissivity) || minTemp >= maxTemp) {
+    alert("Please enter valid range thresholds (Min < Max) and emissivity (0.05 - 1.0).");
+    return;
+  }
+
+  activeEmissivityZones.push({
+    id: Date.now(),
+    name: name,
+    minTemp: minTemp,
+    maxTemp: maxTemp,
+    emissivity: Math.max(0.05, Math.min(1.0, emissivity))
+  });
+
+  nameInput.value = "";
+  renderZonesTable();
+  triggerRecalibration();
+}
+
+function removeEmissivityZone(id) {
+  activeEmissivityZones = activeEmissivityZones.filter(z => z.id !== id);
+  renderZonesTable();
+  triggerRecalibration();
+}
+
+function renderZonesTable() {
+  const tbody = document.getElementById("tblEmissivityZones");
+  if (!tbody) return;
+
+  if (activeEmissivityZones.length === 0) {
+    tbody.innerHTML = `
+      <tr class="border-b border-slate-900 text-slate-500 italic">
+        <td colspan="4" class="py-2 px-2 text-center">No custom zones added. (Default baseline emissivity applied to entire scene).</td>
+      </tr>`;
+    return;
+  }
+
+  tbody.innerHTML = activeEmissivityZones.map(zone => `
+    <tr class="border-b border-slate-800/60 hover:bg-slate-900/50">
+      <td class="py-1 px-2 text-slate-300 font-bold">${zone.name}</td>
+      <td class="py-1 px-2 text-slate-400">${zone.minTemp.toFixed(1)} &deg;C &ndash; ${zone.maxTemp.toFixed(1)} &deg;C</td>
+      <td class="py-1 px-2 text-sky-400 font-bold">&epsilon; = ${zone.emissivity.toFixed(2)}</td>
+      <td class="py-1 px-2">
+        <button onclick="removeEmissivityZone(${zone.id})" class="text-rose-400 hover:text-rose-300 text-[11px] underline">Remove</button>
+      </td>
+    </tr>
+  `).join("");
+}
+
+// --- UNIFIED CALIBRATION & SPATIAL FILTERING PIPELINE ---
+function calibrateFrameMatrix(rawMatrix) {
+  if (!rawMatrix || rawMatrix.length === 0) return rawMatrix;
+
+  const isAstm = document.getElementById("chkEnableAstm")?.checked || false;
+  const isZoning = document.getElementById("chkEnableZoning")?.checked || false;
+  const isBilateral = document.getElementById("chkEnableBilateral")?.checked || false;
+  const defaultEmissivity = parseFloat(document.getElementById("cfgEmissivity")?.value) || 0.95;
+
+  let calibrated = null;
+
+  // 1. Radiometric Inversion Selection
+  if (isZoning && activeEmissivityZones.length > 0) {
+    const epsMatrix = generateEmissivityMatrix(rawMatrix, activeEmissivityZones, defaultEmissivity);
+    calibrated = applyZonedRadiometricCorrection(rawMatrix, epsMatrix, 20.0, 0.95);
+  } else if (isAstm) {
+    const params = {
+      emissivity: defaultEmissivity,
+      distanceMeters: parseFloat(document.getElementById("cfgDistance")?.value) || 1.5,
+      relativeHumidity: parseFloat(document.getElementById("cfgHumidity")?.value) || 50.0,
+      atmTempC: parseFloat(document.getElementById("cfgAtmTemp")?.value) || 20.0,
+      reflTempC: parseFloat(document.getElementById("cfgReflTemp")?.value) || 20.0,
+      winTrans: parseFloat(document.getElementById("cfgWinTrans")?.value) || 1.0,
+      winTempC: parseFloat(document.getElementById("cfgWinTemp")?.value) || 20.0
+    };
+    const res = applyAstmCalibration(rawMatrix, params);
+    calibrated = res.calibratedMatrix;
+  } else {
+    calibrated = applyPlanckRecalibration(rawMatrix, defaultEmissivity, 20.0, 0.95);
+  }
+
+  // 2. Edge-Preserving Bilateral Denoising
+  if (isBilateral) {
+    const radius = parseInt(document.getElementById("cfgFilterRadius")?.value) || 2;
+    const sigmaSpace = parseFloat(document.getElementById("cfgSigmaSpace")?.value) || 2.5;
+    const sigmaColor = parseFloat(document.getElementById("cfgSigmaColor")?.value) || 1.2;
+    calibrated = applyBilateralFilter2D(calibrated, radius, sigmaSpace, sigmaColor);
+  }
+
+  return calibrated;
+}
 // --- UI HANDLERS ---
 function handleSourceChange() {
   const source = document.getElementById("cfgDataSource").value;
@@ -93,12 +194,11 @@ async function handleCsvFilesUpload(event) {
     const text = await file.text();
     const matrix = parseFlirCsvText(text);
     if (matrix && matrix.length > 0) {
-      const currentEmissivity = parseFloat(document.getElementById("cfgEmissivity").value);
       const frameData = {
         id: frameBuffer.length,
         timestamp: file.name,
         rawMatrix: matrix,
-        calibratedMatrix: applyPlanckRecalibration(matrix, currentEmissivity, 20.0, 0.95),
+        calibratedMatrix: calibrateFrameMatrix(matrix),
         width: matrix[0].length,
         height: matrix.length
       };
@@ -112,11 +212,42 @@ async function handleCsvFilesUpload(event) {
 }
 
 function triggerRecalibration() {
-  const targetEmissivity = parseFloat(document.getElementById("cfgEmissivity").value);
+  const isAstm = document.getElementById("chkEnableAstm")?.checked || false;
+  const emissivity = parseFloat(document.getElementById("cfgEmissivity")?.value) || 0.95;
+
+  const astmParams = {
+    emissivity: emissivity,
+    distanceMeters: parseFloat(document.getElementById("cfgDistance")?.value) || 1.5,
+    relativeHumidity: parseFloat(document.getElementById("cfgHumidity")?.value) || 50.0,
+    atmTempC: parseFloat(document.getElementById("cfgAtmTemp")?.value) || 20.0,
+    reflTempC: parseFloat(document.getElementById("cfgReflTemp")?.value) || 20.0,
+    winTrans: parseFloat(document.getElementById("cfgWinTrans")?.value) || 1.0,
+    winTempC: parseFloat(document.getElementById("cfgWinTemp")?.value) || 20.0,
+    baseEmissivity: 0.95
+  };
+
   frameBuffer.forEach(frame => {
-    frame.calibratedMatrix = applyPlanckRecalibration(frame.rawMatrix, targetEmissivity, 20.0, 0.95);
+    // 1. Unified pipeline executes zoned emissivity, ASTM, and bilateral filtering
+    frame.calibratedMatrix = calibrateFrameMatrix(frame.rawMatrix);
+
+    // 2. Preserve ASTM metadata for diagnostic readouts
+    if (isAstm && typeof computeAtmosphericTransmission === "function") {
+      frame.tau_atm = computeAtmosphericTransmission(
+        astmParams.distanceMeters,
+        astmParams.relativeHumidity,
+        astmParams.atmTempC
+      );
+      frame.total_opt_gain = frame.tau_atm * astmParams.winTrans;
+    } else {
+      frame.tau_atm = 1.0;
+      frame.total_opt_gain = 1.0;
+    }
   });
-  if (activeInspectedIdx !== null) inspectFrame(activeInspectedIdx);
+
+  // 3. Re-render active viewport and plots
+  if (activeInspectedIdx !== null) {
+    inspectFrame(activeInspectedIdx);
+  }
 }
 
 function replotActiveCanvas() {
@@ -183,6 +314,43 @@ async function ingestFrame() {
     timestamp: new Date().toLocaleTimeString(),
     rawMatrix: rawMatrix,
     calibratedMatrix: applyPlanckRecalibration(rawMatrix, currentEmissivity, 20.0, 0.95),
+    width: width,
+    height: height
+  };
+  
+  frameBuffer.push(frameData);
+  saveFrameToDatabase(frameData);
+
+  document.getElementById("lblFrameCount").innerText = frameBuffer.length;
+  appendThumbnailToGallery(frameData);
+}async function ingestFrame() {
+  const sourceMode = document.getElementById("cfgDataSource").value;
+  let rawMatrix = null;
+  let width = 80, height = 60;
+
+  if (sourceMode === "pi") {
+    const url = document.getElementById("cfgApiUrl").value;
+    try {
+      const res = await fetch(url);
+      const json = await res.json();
+      rawMatrix = json.data;
+      width = json.width;
+      height = json.height;
+    } catch (err) {
+      console.error("Fetch error:", err);
+      return;
+    }
+  } else if (sourceMode === "simulation") {
+    rawMatrix = generateMockThermalMatrix(60, 80);
+  } else {
+    return;
+  }
+
+  const frameData = {
+    id: frameBuffer.length,
+    timestamp: new Date().toLocaleTimeString(),
+    rawMatrix: rawMatrix,
+    calibratedMatrix: calibrateFrameMatrix(rawMatrix),
     width: width,
     height: height
   };
@@ -422,7 +590,41 @@ function inspectFrame(idx) {
     document.getElementById("hoverCoords").innerText = `(${pt.x}, ${pt.y})`;
     document.getElementById("hoverTemp").innerText = `${pt.z.toFixed(2)} deg C`;
   });
+  // Compute Offset / Difference Matrix (T_corrected - T_raw)
+  const isAstm = document.getElementById("chkEnableAstm")?.checked || false;
+  let offsetMatrix = Array.from({ length: matrix.length }, () => new Array(matrix[0].length).fill(0));
+  let sumOffset = 0, totalPx = matrix.length * matrix[0].length;
 
+  for (let r = 0; r < matrix.length; r++) {
+    for (let c = 0; c < matrix[0].length; c++) {
+      const diff = frame.calibratedMatrix[r][c] - frame.rawMatrix[r][c];
+      offsetMatrix[r][c] = diff;
+      sumOffset += diff;
+    }
+  }
+
+  const meanOffset = sumOffset / totalPx;
+  if (document.getElementById("lblAtmTrans")) {
+    document.getElementById("lblAtmTrans").innerText = (frame.tau_atm || 1.0).toFixed(4);
+    document.getElementById("lblTotalOptGain").innerText = (frame.total_opt_gain || 1.0).toFixed(4);
+    document.getElementById("lblMeanOffset").innerText = `${meanOffset >= 0 ? '+' : ''}${meanOffset.toFixed(2)} °C`;
+  }
+
+  // Render ASTM Offset Plot
+  if (isAstm) {
+    Plotly.newPlot('astmCorrectionPlot', [{
+      z: offsetMatrix,
+      type: 'heatmap',
+      colorscale: 'RdBu',
+      reversescale: true,
+      hovertemplate: 'X: %{x}<br>Y: %{y}<br>Offset: %{z:+.2f} °C<extra></extra>'
+    }], {
+      margin: { t: 5, b: 5, l: 25, r: 5 },
+      paper_bgcolor: 'transparent',
+      plot_bgcolor: 'transparent',
+      font: { color: '#94a3b8' }
+    });
+  }
   updateLineProfile();
 }
 
@@ -786,5 +988,23 @@ function runPctAnalysis() {
     yaxis: { title: 'Variance Explained (%)', color: '#64748b' }
   });
 }
+// --- RADIOMETRIC PLANCK RE-CALIBRATION ---
+function applyPlanckRecalibration(matrix, targetEmissivity = 0.95, reflTempC = 20.0, baseEmissivity = 0.95) {
+  const eps = Math.max(0.05, Math.min(1.0, parseFloat(targetEmissivity)));
+  const eps_base = Math.max(0.05, Math.min(1.0, parseFloat(baseEmissivity)));
+  const T_refl_K4 = Math.pow(parseFloat(reflTempC) + 273.15, 4);
+
+  return matrix.map(row => row.map(tempC => {
+    const T_raw_K4 = Math.pow(tempC + 273.15, 4);
+    
+    // Stefan-Boltzmann radiometric energy balance
+    const W_tot = eps_base * T_raw_K4 + (1.0 - eps_base) * T_refl_K4;
+    const W_obj = (W_tot - (1.0 - eps) * T_refl_K4) / eps;
+    
+    const T_corrected_K = Math.pow(Math.max(0, W_obj), 0.25);
+    return parseFloat((T_corrected_K - 273.15).toFixed(2));
+  }));
+}
+
 
 window.onload = initDatabase;

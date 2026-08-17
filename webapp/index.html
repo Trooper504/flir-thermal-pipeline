@@ -474,6 +474,167 @@
           </div>
         </div>
       </details>
+      <!-- COLLAPSIBLE: MULTI-PARAMETER ASTM ATMOSPHERIC & OPTICAL CALIBRATION -->
+      <details class="group bg-slate-900 border border-slate-800 rounded-lg overflow-hidden">
+        <summary class="flex justify-between items-center p-4 cursor-pointer select-none bg-slate-900 hover:bg-slate-800/60 transition border-b border-transparent group-open:border-slate-800">
+          <div class="flex items-center gap-2">
+            <svg class="w-4 h-4 text-slate-400 transform transition-transform group-open:rotate-90" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
+            </svg>
+            <h3 class="text-xs font-bold font-mono text-slate-300">ASTM RADIOMETRIC ATMOSPHERE &amp; OPTICS CALIBRATION</h3>
+          </div>
+          <div class="flex items-center gap-2" onclick="event.stopPropagation()">
+            <input id="chkEnableAstm" type="checkbox" onchange="triggerRecalibration()" class="rounded bg-slate-950 border-slate-700 text-slate-400">
+            <label for="chkEnableAstm" class="text-xs font-mono text-slate-300">Enable ASTM Physics</label>
+          </div>
+        </summary>
+
+        <div class="p-4 space-y-4">
+          <div class="grid grid-cols-2 md:grid-cols-6 gap-4 text-xs font-mono">
+            <div>
+              <label class="block text-slate-500 mb-1">Target Distance (m)</label>
+              <input id="cfgDistance" type="number" step="0.5" min="0.1" max="100.0" value="1.5" onchange="triggerRecalibration()" class="w-full bg-slate-950 border border-slate-800 text-slate-200 rounded px-2 py-1">
+            </div>
+            <div>
+              <label class="block text-slate-500 mb-1">Relative Humidity (%)</label>
+              <input id="cfgHumidity" type="number" step="1" min="1" max="100" value="50" onchange="triggerRecalibration()" class="w-full bg-slate-950 border border-slate-800 text-slate-200 rounded px-2 py-1">
+            </div>
+            <div>
+              <label class="block text-slate-500 mb-1">Atmosphere Temp (&deg;C)</label>
+              <input id="cfgAtmTemp" type="number" step="0.5" value="20.0" onchange="triggerRecalibration()" class="w-full bg-slate-950 border border-slate-800 text-slate-200 rounded px-2 py-1">
+            </div>
+            <div>
+              <label class="block text-slate-500 mb-1">Reflected Temp (&deg;C)</label>
+              <input id="cfgReflTemp" type="number" step="0.5" value="20.0" onchange="triggerRecalibration()" class="w-full bg-slate-950 border border-slate-800 text-slate-200 rounded px-2 py-1">
+            </div>
+            <div>
+              <label class="block text-slate-500 mb-1">Window Trans. (&tau;_win)</label>
+              <input id="cfgWinTrans" type="number" step="0.01" min="0.05" max="1.0" value="1.00" onchange="triggerRecalibration()" class="w-full bg-slate-950 border border-slate-800 text-slate-200 rounded px-2 py-1">
+            </div>
+            <div>
+              <label class="block text-slate-500 mb-1">Window Temp (&deg;C)</label>
+              <input id="cfgWinTemp" type="number" step="0.5" value="20.0" onchange="triggerRecalibration()" class="w-full bg-slate-950 border border-slate-800 text-slate-200 rounded px-2 py-1">
+            </div>
+          </div>
+
+          <!-- Live Atmospheric Transmission Readout & Error Difference Plot -->
+          <div class="grid grid-cols-1 md:grid-cols-3 gap-4 pt-2">
+            <div class="bg-slate-950 p-3 rounded border border-slate-800 space-y-2 text-xs font-mono">
+              <span class="text-[11px] font-bold text-slate-400 uppercase">Calculated Optical Coupling</span>
+              <div class="flex justify-between border-b border-slate-900 pb-1">
+                <span class="text-slate-500">Atm Transmission (&tau;_atm):</span>
+                <span id="lblAtmTrans" class="text-slate-200 font-bold">1.000</span>
+              </div>
+              <div class="flex justify-between border-b border-slate-900 pb-1">
+                <span class="text-slate-500">Total Optical Gain:</span>
+                <span id="lblTotalOptGain" class="text-slate-200 font-bold">1.000</span>
+              </div>
+              <div class="flex justify-between">
+                <span class="text-slate-500">Mean Correction Offset:</span>
+                <span id="lblMeanOffset" class="text-slate-200 font-bold">0.00 &deg;C</span>
+              </div>
+            </div>
+
+            <div class="md:col-span-2 bg-slate-950 p-3 rounded border border-slate-800">
+              <h4 class="text-[11px] font-bold font-mono text-slate-400 mb-2">CALIBRATION OFFSET MAP (&Delta;T = T_corrected - T_raw &deg;C)</h4>
+              <div id="astmCorrectionPlot" class="w-full h-44"></div>
+            </div>
+          </div>
+        </div>
+      </details>
+      <!-- COLLAPSIBLE: ADAPTIVE EMISSIVITY ZONING & SPATIAL FILTERING -->
+      <details class="group bg-slate-900 border border-slate-800 rounded-lg overflow-hidden">
+        <summary class="flex justify-between items-center p-4 cursor-pointer select-none bg-slate-900 hover:bg-slate-800/60 transition border-b border-transparent group-open:border-slate-800">
+          <div class="flex items-center gap-2">
+            <svg class="w-4 h-4 text-slate-400 transform transition-transform group-open:rotate-90" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
+            </svg>
+            <h3 class="text-xs font-bold font-mono text-slate-300">ADAPTIVE EMISSIVITY ZONING &amp; SPATIAL FILTERING</h3>
+          </div>
+          <span class="text-[11px] text-slate-500 font-mono">Pixel-wise &epsilon;(x,y) &amp; Bilateral Denoising</span>
+        </summary>
+
+        <div class="p-4 space-y-4">
+          <!-- SPATIAL FILTER CONTROLS -->
+          <div class="bg-slate-950 p-3 rounded border border-slate-800 space-y-2">
+            <div class="flex justify-between items-center border-b border-slate-900 pb-1.5">
+              <span class="text-[11px] font-bold text-slate-400 font-mono uppercase">1. Edge-Preserving Bilateral Spatial Filter</span>
+              <div class="flex items-center gap-2">
+                <input id="chkEnableBilateral" type="checkbox" onchange="triggerRecalibration()" class="rounded bg-slate-900 border-slate-700 text-slate-400">
+                <label for="chkEnableBilateral" class="text-xs font-mono text-slate-300">Enable Denoising</label>
+              </div>
+            </div>
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4 text-xs font-mono pt-1">
+              <div>
+                <label class="block text-slate-500 mb-1">Filter Kernel Radius ($r$ px)</label>
+                <input id="cfgFilterRadius" type="number" min="1" max="5" value="2" onchange="triggerRecalibration()" class="w-full bg-slate-900 border border-slate-800 text-slate-200 rounded px-2 py-1">
+              </div>
+              <div>
+                <label class="block text-slate-500 mb-1">Spatial Sigma ($\sigma_{\text{space}}$)</label>
+                <input id="cfgSigmaSpace" type="number" step="0.5" min="0.5" max="10.0" value="2.5" onchange="triggerRecalibration()" class="w-full bg-slate-900 border border-slate-800 text-slate-200 rounded px-2 py-1">
+              </div>
+              <div>
+                <label class="block text-slate-500 mb-1">Range/NETD Sigma ($\sigma_{\text{color}}$ in &deg;C)</label>
+                <input id="cfgSigmaColor" type="number" step="0.1" min="0.1" max="10.0" value="1.2" onchange="triggerRecalibration()" class="w-full bg-slate-900 border border-slate-800 text-slate-200 rounded px-2 py-1">
+              </div>
+            </div>
+          </div>
+
+          <!-- ADAPTIVE EMISSIVITY ZONES TABLE -->
+          <div class="bg-slate-950 p-3 rounded border border-slate-800 space-y-3">
+            <div class="flex justify-between items-center border-b border-slate-900 pb-1.5">
+              <span class="text-[11px] font-bold text-slate-400 font-mono uppercase">2. Material Emissivity Segmentation Zones</span>
+              <div class="flex items-center gap-2">
+                <input id="chkEnableZoning" type="checkbox" onchange="triggerRecalibration()" class="rounded bg-slate-900 border-slate-700 text-slate-400">
+                <label for="chkEnableZoning" class="text-xs font-mono text-slate-300">Enable Zoned Radiometry</label>
+              </div>
+            </div>
+
+            <div class="grid grid-cols-2 md:grid-cols-5 gap-3 text-xs font-mono">
+              <div>
+                <label class="block text-slate-500 mb-1">Zone Name</label>
+                <input id="zoneName" type="text" placeholder="e.g. Copper Trace" class="w-full bg-slate-900 border border-slate-800 text-slate-200 rounded px-2 py-1">
+              </div>
+              <div>
+                <label class="block text-slate-500 mb-1">Min Temp Threshold (&deg;C)</label>
+                <input id="zoneMinTemp" type="number" step="0.5" value="28.0" class="w-full bg-slate-900 border border-slate-800 text-slate-200 rounded px-2 py-1">
+              </div>
+              <div>
+                <label class="block text-slate-500 mb-1">Max Temp Threshold (&deg;C)</label>
+                <input id="zoneMaxTemp" type="number" step="0.5" value="38.0" class="w-full bg-slate-900 border border-slate-800 text-slate-200 rounded px-2 py-1">
+              </div>
+              <div>
+                <label class="block text-slate-500 mb-1">Material &epsilon; (0.05 - 1.0)</label>
+                <input id="zoneEmissivity" type="number" step="0.01" min="0.05" max="1.0" value="0.30" class="w-full bg-slate-900 border border-slate-800 text-slate-200 rounded px-2 py-1">
+              </div>
+              <div class="flex items-end">
+                <button type="button" onclick="addEmissivityZone()" class="w-full bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 px-3 py-1 rounded text-xs font-mono transition">
+                  + ADD ZONE
+                </button>
+              </div>
+            </div>
+
+            <!-- Active Zones List -->
+            <div class="overflow-x-auto">
+              <table class="w-full text-left border-collapse text-xs font-mono text-slate-300 mt-2">
+                <thead>
+                  <tr class="border-b border-slate-800 text-slate-500 uppercase">
+                    <th class="py-1 px-2">Zone</th>
+                    <th class="py-1 px-2">Temp Range</th>
+                    <th class="py-1 px-2">Emissivity (&epsilon;)</th>
+                    <th class="py-1 px-2">Action</th>
+                  </tr>
+                </thead>
+                <tbody id="tblEmissivityZones">
+                  <tr class="border-b border-slate-900 text-slate-500 italic">
+                    <td colspan="4" class="py-2 px-2 text-center">No custom zones added. (Default baseline emissivity applied to entire scene).</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </details>
     </div>
   </div>
 
