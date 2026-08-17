@@ -626,6 +626,8 @@ function inspectFrame(idx) {
     });
   }
   updateLineProfile();
+  // Trigger Heat Flux calculation for inspected frame
+  replotHeatFlux();
 }
 
 function updateLineProfile() {
@@ -820,6 +822,60 @@ async function exportLabReportJSON() {
   document.body.appendChild(downloadLink);
   downloadLink.click();
   downloadLink.remove();
+}
+// --- HEAT FLUX PRESET HANDLER ---
+function handleFluxMaterialPreset() {
+  const preset = document.getElementById("cfgFluxMaterial").value;
+  if (preset !== "custom") {
+    document.getElementById("cfgConductivity").value = preset;
+  }
+  replotHeatFlux();
+}
+
+// --- RENDER HEAT FLUX VECTOR FIELD & MAGNITUDE PLOTS ---
+function replotHeatFlux() {
+  if (activeInspectedIdx === null || !frameBuffer[activeInspectedIdx]) return;
+  const frame = frameBuffer[activeInspectedIdx];
+  const matrix = frame.calibratedMatrix;
+
+  const kConductivity = parseFloat(document.getElementById("cfgConductivity")?.value) || 400.0;
+  const pixelPitchMm = parseFloat(document.getElementById("cfgPixelPitchMm")?.value) || 1.0;
+  const downsampleStep = parseInt(document.getElementById("cfgFluxDensity")?.value) || 5;
+
+  const fluxData = computeHeatFluxField(matrix, kConductivity, pixelPitchMm / 1000.0, downsampleStep);
+  if (!fluxData) return;
+
+  // 1. Update Telemetry Labels
+  document.getElementById("lblPeakFlux").innerText = `${fluxData.maxFluxKw.toFixed(2)} kW/m²`;
+  document.getElementById("lblMeanFlux").innerText = `${fluxData.meanFluxKw.toFixed(2)} kW/m²`;
+  document.getElementById("lblMaxFluxCoord").innerText = `(${fluxData.maxFluxCoord.x}, ${fluxData.maxFluxCoord.y})`;
+
+  // 2. Heatmap with Vector Quiver Overlays
+  Plotly.newPlot('fluxQuiverPlot', [{
+    z: matrix,
+    type: 'heatmap',
+    colorscale: 'YlOrRd',
+    hovertemplate: 'X: %{x}<br>Y: %{y}<br>Temp: %{z:.2f} °C<extra></extra>'
+  }], {
+    margin: { t: 5, b: 5, l: 25, r: 5 },
+    paper_bgcolor: 'transparent',
+    plot_bgcolor: 'transparent',
+    font: { color: '#94a3b8' },
+    annotations: fluxData.quiverAnnotations
+  });
+
+  // 3. Heat Flux Magnitude Heatmap
+  Plotly.newPlot('fluxMagnitudePlot', [{
+    z: fluxData.qMagMatrix,
+    type: 'heatmap',
+    colorscale: 'Viridis',
+    hovertemplate: 'X: %{x}<br>Y: %{y}<br>Flux: %{z:.2f} kW/m²<extra></extra>'
+  }], {
+    margin: { t: 5, b: 5, l: 25, r: 5 },
+    paper_bgcolor: 'transparent',
+    plot_bgcolor: 'transparent',
+    font: { color: '#94a3b8' }
+  });
 }
 
 async function generatePrintableLabReport() {
@@ -1049,6 +1105,87 @@ async function generatePrintableLabReport() {
     </html>
   `);
   reportWindow.document.close();
+}
+
+// --- TRANSIENT TIME CONSTANT FIT CONTROLLER ---
+function runTransientTauFit() {
+  const framesToProcess = selectedIndices.size >= 3
+    ? Array.from(selectedIndices).sort((a, b) => a - b).map(i => frameBuffer[i])
+    : frameBuffer;
+
+  if (framesToProcess.length < 3) {
+    alert("Time constant (tau) fitting requires at least 3 frames in sequence.");
+    return;
+  }
+
+  const probeType = document.getElementById("cfgTauProbe")?.value || "p1";
+  const dtSec = parseFloat(document.getElementById("cfgTimeStepSec")?.value) || 1.0;
+  const T_inf = parseFloat(document.getElementById("cfgAsymptoticTemp")?.value) || 22.0;
+  const powerWatts = parseFloat(document.getElementById("cfgAppliedPower")?.value) || 5.0;
+
+  // 1. Extract probe coordinates
+  let px = 20, py = 20;
+  if (probeType === "p1") {
+    px = parseInt(document.getElementById("pt1X")?.value) || 20;
+    py = parseInt(document.getElementById("pt1Y")?.value) || 20;
+  } else if (probeType === "p2") {
+    px = parseInt(document.getElementById("pt2X")?.value) || 40;
+    py = parseInt(document.getElementById("pt2Y")?.value) || 40;
+  } else if (probeType === "hotspot") {
+    const roi = detectHotspotROI(framesToProcess[0].calibratedMatrix);
+    px = roi.peakCoord.x;
+    py = roi.peakCoord.y;
+  }
+
+  // 2. Extract temporal temperature series
+  let timeArray = [];
+  let tempArray = [];
+
+  for (let i = 0; i < framesToProcess.length; i++) {
+    const mat = framesToProcess[i].calibratedMatrix;
+    const r = Math.max(0, Math.min(mat.length - 1, py));
+    const c = Math.max(0, Math.min(mat[0].length - 1, px));
+    timeArray.push(i * dtSec);
+    tempArray.push(mat[r][c]);
+  }
+
+  // 3. Compute regression fit
+  const fitResult = fitTransientTimeConstant(timeArray, tempArray, T_inf, powerWatts);
+  if (!fitResult) return;
+
+  // 4. Update Readout Labels
+  document.getElementById("lblTauValue").innerText = isFinite(fitResult.tau) ? `${fitResult.tau.toFixed(2)} s` : `--`;
+  document.getElementById("lblTauR2").innerText = `${fitResult.r2.toFixed(4)}`;
+  document.getElementById("lblRthValue").innerText = `${fitResult.R_th.toFixed(2)} K/W`;
+  document.getElementById("lblCthValue").innerText = `${fitResult.C_th.toFixed(2)} J/K`;
+
+  // 5. Render Scatter Measured vs Exponential Fit
+  Plotly.newPlot('tauDecayPlot', [
+    {
+      x: fitResult.timeArray,
+      y: fitResult.tempArray,
+      name: `Measured Probe (${px}, ${py})`,
+      mode: 'markers',
+      type: 'scatter',
+      marker: { color: '#38bdf8', size: 6 }
+    },
+    {
+      x: fitResult.timeArray,
+      y: fitResult.fitCurve,
+      name: `Fit: T(t) = ${fitResult.T_inf.toFixed(1)} + (${(fitResult.T_0 - fitResult.T_inf).toFixed(1)})e^{-t/${fitResult.tau.toFixed(1)}}`,
+      mode: 'lines',
+      type: 'scatter',
+      line: { color: '#f59e0b', width: 2, dash: 'solid' }
+    }
+  ], {
+    margin: { t: 10, b: 30, l: 40, r: 20 },
+    paper_bgcolor: 'transparent',
+    plot_bgcolor: 'transparent',
+    font: { color: '#94a3b8' },
+    xaxis: { title: 'Elapsed Time (seconds)', color: '#64748b', gridcolor: '#1e293b' },
+    yaxis: { title: 'Temperature (°C)', color: '#64748b', gridcolor: '#1e293b' },
+    legend: { orientation: 'h', y: 1.15 }
+  });
 }
 
 // --- RUN ADVANCED PPT AND TSR ANALYSIS ---

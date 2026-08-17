@@ -376,6 +376,172 @@ function applyZonedRadiometricCorrection(matrix, epsMatrix, reflTempC = 20.0, ba
     return parseFloat((T_corrected_K - 273.15).toFixed(2));
   }));
 }
+// --- 2D CONDUCTIVE HEAT FLUX VECTOR FIELD ENGINE (FOURIER'S LAW) ---
+function computeHeatFluxField(matrix, kConductivity = 400.0, pixelPitchMeters = 0.001, downsampleStep = 5) {
+  if (!matrix || matrix.length < 3 || matrix[0].length < 3) return null;
+
+  const rows = matrix.length;
+  const cols = matrix[0].length;
+  const dx = Math.max(1e-5, parseFloat(pixelPitchMeters) || 0.001);
+  const k = Math.max(1e-4, parseFloat(kConductivity) || 400.0);
+
+  let qxMatrix = Array.from({ length: rows }, () => new Array(cols).fill(0));
+  let qyMatrix = Array.from({ length: rows }, () => new Array(cols).fill(0));
+  let qMagMatrix = Array.from({ length: rows }, () => new Array(cols).fill(0));
+
+  let maxFlux = 0.0;
+  let maxCoord = { x: 0, y: 0 };
+  let sumFlux = 0.0;
+  let validPixels = 0;
+
+  // 1. Calculate continuous gradient and flux components
+  for (let r = 1; r < rows - 1; r++) {
+    for (let c = 1; c < cols - 1; c++) {
+      const dtdx = (matrix[r][c + 1] - matrix[r][c - 1]) / (2.0 * dx);
+      const dtdy = (matrix[r + 1][c] - matrix[r - 1][c]) / (2.0 * dx);
+
+      // Fourier's Law: q = -k * grad(T)
+      const qx = -k * dtdx;
+      const qy = -k * dtdy;
+      const mag = Math.sqrt(qx * qx + qy * qy) / 1000.0; // Convert W/m^2 to kW/m^2
+
+      qxMatrix[r][c] = qx;
+      qyMatrix[r][c] = qy;
+      qMagMatrix[r][c] = mag;
+
+      sumFlux += mag;
+      validPixels++;
+
+      if (mag > maxFlux) {
+        maxFlux = mag;
+        maxCoord = { x: c, y: r };
+      }
+    }
+  }
+
+  // 2. Generate vector quiver lines for Plotly
+  const step = Math.max(2, parseInt(downsampleStep) || 5);
+  let quiverAnnotations = [];
+
+  for (let r = step; r < rows - step; r += step) {
+    for (let c = step; c < cols - step; c += step) {
+      const qx = qxMatrix[r][c];
+      const qy = qyMatrix[r][c];
+      const mag = qMagMatrix[r][c];
+
+      if (mag > 0.05 * maxFlux && maxFlux > 0) {
+        const normFactor = (step * 0.8) / (maxFlux || 1.0);
+        const arrowDx = (qx / 1000.0) * normFactor;
+        const arrowDy = (qy / 1000.0) * normFactor;
+
+        quiverAnnotations.push({
+          x: c + arrowDx,
+          y: r + arrowDy,
+          ax: c,
+          ay: r,
+          xref: 'x',
+          yref: 'y',
+          axref: 'x',
+          ayref: 'y',
+          showarrow: true,
+          arrowhead: 2,
+          arrowsize: 1,
+          arrowwidth: 1.2,
+          arrowcolor: '#38bdf8'
+        });
+      }
+    }
+  }
+
+  return {
+    k: k,
+    dx: dx,
+    maxFluxKw: maxFlux,
+    meanFluxKw: validPixels > 0 ? sumFlux / validPixels : 0.0,
+    maxFluxCoord: maxCoord,
+    qMagMatrix: qMagMatrix,
+    quiverAnnotations: quiverAnnotations
+  };
+}
+
+// --- TRANSIENT THERMAL TIME CONSTANT (TAU) EXPONENTIAL FIT ENGINE ---
+function fitTransientTimeConstant(timeArray, tempArray, asymptoticTemp = 20.0, appliedPowerWatts = 5.0) {
+  if (!timeArray || !tempArray || timeArray.length < 3 || timeArray.length !== tempArray.length) {
+    return null;
+  }
+
+  const N = timeArray.length;
+  const T_inf = parseFloat(asymptoticTemp);
+  const T_0 = tempArray[0];
+  const deltaT_0 = T_0 - T_inf;
+
+  if (Math.abs(deltaT_0) < 0.1) {
+    return null; // Insufficient delta T for regression
+  }
+
+  let t_shifted = [];
+  let log_theta = [];
+  let validPoints = 0;
+
+  for (let i = 0; i < N; i++) {
+    const t = timeArray[i] - timeArray[0];
+    const theta = (tempArray[i] - T_inf) / deltaT_0;
+
+    // Strict positive bounds for natural log
+    if (theta > 0.001) {
+      t_shifted.push(t);
+      log_theta.push(Math.log(theta));
+      validPoints++;
+    }
+  }
+
+  if (validPoints < 3) return null;
+
+  // Linear regression through origin: ln(theta) = -beta * t
+  let sum_t_sq = 0.0;
+  let sum_t_logtheta = 0.0;
+
+  for (let i = 0; i < validPoints; i++) {
+    sum_t_sq += t_shifted[i] * t_shifted[i];
+    sum_t_logtheta += t_shifted[i] * log_theta[i];
+  }
+
+  const beta = -sum_t_logtheta / (sum_t_sq || 1.0);
+  const tau = beta > 1e-6 ? 1.0 / beta : Infinity;
+
+  // Compute fitted values and R^2 metric
+  let temp_fit = [];
+  let ss_tot = 0.0;
+  let ss_res = 0.0;
+  const mean_measured = tempArray.reduce((acc, v) => acc + v, 0) / N;
+
+  for (let i = 0; i < N; i++) {
+    const t = timeArray[i] - timeArray[0];
+    const T_fitted = T_inf + deltaT_0 * Math.exp(-beta * t);
+    temp_fit.push(parseFloat(T_fitted.toFixed(3)));
+
+    ss_res += Math.pow(tempArray[i] - T_fitted, 2);
+    ss_tot += Math.pow(tempArray[i] - mean_measured, 2);
+  }
+
+  const r2 = ss_tot > 0 ? Math.max(0, 1.0 - (ss_res / ss_tot)) : 1.0;
+  const P = Math.max(1e-3, parseFloat(appliedPowerWatts) || 1.0);
+  const R_th = Math.abs(deltaT_0) / P;
+  const C_th = tau < Infinity ? tau / R_th : 0.0;
+
+  return {
+    tau: tau,
+    beta: beta,
+    r2: r2,
+    T_0: T_0,
+    T_inf: T_inf,
+    R_th: R_th,
+    C_th: C_th,
+    timeArray: timeArray,
+    tempArray: tempArray,
+    fitCurve: temp_fit
+  };
+}
 // --- PRINCIPAL COMPONENT THERMOGRAPHY (PCT) ENGINE ---
 function computePctModes(frameSequence, maxComponents = 3) {
   const numFrames = frameSequence.length;

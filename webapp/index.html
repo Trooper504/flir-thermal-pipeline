@@ -635,6 +635,151 @@
           </div>
         </div>
       </details>
+      <!-- COLLAPSIBLE: 2D CONDUCTIVE HEAT FLUX VECTOR FIELD -->
+      <details class="group bg-slate-900 border border-slate-800 rounded-lg overflow-hidden">
+        <summary class="flex justify-between items-center p-4 cursor-pointer select-none bg-slate-900 hover:bg-slate-800/60 transition border-b border-transparent group-open:border-slate-800">
+          <div class="flex items-center gap-2">
+            <svg class="w-4 h-4 text-slate-400 transform transition-transform group-open:rotate-90" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
+            </svg>
+            <h3 class="text-xs font-bold font-mono text-slate-300">2D CONDUCTIVE HEAT FLUX VECTOR FIELD (q = -k&nabla;T)</h3>
+          </div>
+          <span class="text-[11px] text-slate-500 font-mono">Fourier Conduction Dynamics</span>
+        </summary>
+
+        <div class="p-4 space-y-4">
+          <div class="grid grid-cols-2 md:grid-cols-5 gap-4 text-xs font-mono">
+            <div>
+              <label class="block text-slate-500 mb-1">Material Preset</label>
+              <select id="cfgFluxMaterial" onchange="handleFluxMaterialPreset()" class="w-full bg-slate-950 border border-slate-800 text-slate-200 rounded px-2 py-1.5 focus:outline-none">
+                <option value="400">Copper (400 W/m&middot;K)</option>
+                <option value="237">Aluminum (237 W/m&middot;K)</option>
+                <option value="150">Silicon (150 W/m&middot;K)</option>
+                <option value="15">Stainless Steel (15 W/m&middot;K)</option>
+                <option value="0.25">FR4 Substrate (0.25 W/m&middot;K)</option>
+                <option value="custom">Custom Thermal Conductivity</option>
+              </select>
+            </div>
+            <div>
+              <label class="block text-slate-500 mb-1">Conductivity $k$ (W/m&middot;K)</label>
+              <input id="cfgConductivity" type="number" step="0.1" min="0.01" value="400" onchange="replotHeatFlux()" class="w-full bg-slate-950 border border-slate-800 text-slate-200 rounded px-2 py-1.5">
+            </div>
+            <div>
+              <label class="block text-slate-500 mb-1">Pixel Pitch $\Delta x$ (mm)</label>
+              <input id="cfgPixelPitchMm" type="number" step="0.1" min="0.05" value="1.0" onchange="replotHeatFlux()" class="w-full bg-slate-950 border border-slate-800 text-slate-200 rounded px-2 py-1.5">
+            </div>
+            <div>
+              <label class="block text-slate-500 mb-1">Vector Grid Density</label>
+              <select id="cfgFluxDensity" onchange="replotHeatFlux()" class="w-full bg-slate-950 border border-slate-800 text-slate-200 rounded px-2 py-1.5 focus:outline-none">
+                <option value="3">Dense (Step 3 px)</option>
+                <option value="5" selected>Balanced (Step 5 px)</option>
+                <option value="8">Sparse (Step 8 px)</option>
+              </select>
+            </div>
+            <div class="flex items-end">
+              <button onclick="replotHeatFlux()" class="w-full bg-slate-800 hover:bg-slate-700 text-slate-100 border border-slate-600 px-4 py-1.5 rounded text-xs font-mono transition">
+                RECOMPUTE FLUX
+              </button>
+            </div>
+          </div>
+
+          <!-- Telemetry Readouts -->
+          <div class="grid grid-cols-1 md:grid-cols-3 gap-3 text-xs font-mono">
+            <div class="bg-slate-950 p-2.5 rounded border border-slate-800 flex justify-between">
+              <span class="text-slate-500">Peak Heat Flux ($|\vec{q}|_{\max}$):</span>
+              <span id="lblPeakFlux" class="text-rose-400 font-bold">-- kW/m&sup2;</span>
+            </div>
+            <div class="bg-slate-950 p-2.5 rounded border border-slate-800 flex justify-between">
+              <span class="text-slate-500">Mean Flux Density:</span>
+              <span id="lblMeanFlux" class="text-sky-400 font-bold">-- kW/m&sup2;</span>
+            </div>
+            <div class="bg-slate-950 p-2.5 rounded border border-slate-800 flex justify-between">
+              <span class="text-slate-500">Max Conduction Location:</span>
+              <span id="lblMaxFluxCoord" class="text-slate-200 font-bold">(--, --)</span>
+            </div>
+          </div>
+
+          <!-- Visualizations -->
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-4 pt-1">
+            <div class="bg-slate-950 p-3 rounded border border-slate-800">
+              <h4 class="text-[11px] font-bold font-mono text-slate-400 mb-2">HEAT FLUX VECTOR QUIVER OVERLAY (&vec;q Vectors on T)</h4>
+              <div id="fluxQuiverPlot" class="w-full h-80"></div>
+            </div>
+            <div class="bg-slate-950 p-3 rounded border border-slate-800">
+              <h4 class="text-[11px] font-bold font-mono text-slate-400 mb-2">HEAT FLUX DENSITY MAGNITUDE (|&vec;q| in kW/m&sup2;)</h4>
+              <div id="fluxMagnitudePlot" class="w-full h-80"></div>
+            </div>
+          </div>
+        </div>
+      </details>
+      <!-- COLLAPSIBLE: TRANSIENT THERMAL TIME CONSTANT (TAU = R_TH * C_TH) -->
+      <details class="group bg-slate-900 border border-slate-800 rounded-lg overflow-hidden">
+        <summary class="flex justify-between items-center p-4 cursor-pointer select-none bg-slate-900 hover:bg-slate-800/60 transition border-b border-transparent group-open:border-slate-800">
+          <div class="flex items-center gap-2">
+            <svg class="w-4 h-4 text-slate-400 transform transition-transform group-open:rotate-90" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
+            </svg>
+            <h3 class="text-xs font-bold font-mono text-slate-300">TRANSIENT THERMAL TIME CONSTANT FIT (&tau; = R_th &middot; C_th)</h3>
+          </div>
+          <span class="text-[11px] text-slate-500 font-mono">Lumped Newton Cooling &amp; Dissipation Kinetics</span>
+        </summary>
+
+        <div class="p-4 space-y-4">
+          <div class="grid grid-cols-2 md:grid-cols-5 gap-4 text-xs font-mono">
+            <div>
+              <label class="block text-slate-500 mb-1">Probe Inspection Point</label>
+              <select id="cfgTauProbe" onchange="runTransientTauFit()" class="w-full bg-slate-950 border border-slate-800 text-slate-200 rounded px-2 py-1.5 focus:outline-none">
+                <option value="p1" selected>Point 1 (P1)</option>
+                <option value="p2">Point 2 (P2)</option>
+                <option value="hotspot">Peak Hotspot Coordinate</option>
+              </select>
+            </div>
+            <div>
+              <label class="block text-slate-500 mb-1">Time Delta per Frame ($\Delta t$ sec)</label>
+              <input id="cfgTimeStepSec" type="number" step="0.1" min="0.01" value="1.0" onchange="runTransientTauFit()" class="w-full bg-slate-950 border border-slate-800 text-slate-200 rounded px-2 py-1.5">
+            </div>
+            <div>
+              <label class="block text-slate-500 mb-1">Asymptotic $T_\infty$ (&deg;C)</label>
+              <input id="cfgAsymptoticTemp" type="number" step="0.5" value="22.0" onchange="runTransientTauFit()" class="w-full bg-slate-950 border border-slate-800 text-slate-200 rounded px-2 py-1.5">
+            </div>
+            <div>
+              <label class="block text-slate-500 mb-1">Applied Power $P_{\text{diss}}$ (W)</label>
+              <input id="cfgAppliedPower" type="number" step="0.5" min="0.01" value="5.0" onchange="runTransientTauFit()" class="w-full bg-slate-950 border border-slate-800 text-slate-200 rounded px-2 py-1.5">
+            </div>
+            <div class="flex items-end">
+              <button onclick="runTransientTauFit()" class="w-full bg-slate-800 hover:bg-slate-700 text-slate-100 border border-slate-600 px-4 py-1.5 rounded text-xs font-mono transition">
+                EXECUTE &tau; FIT
+              </button>
+            </div>
+          </div>
+
+          <!-- Telemetry Readouts -->
+          <div class="grid grid-cols-2 md:grid-cols-4 gap-3 text-xs font-mono">
+            <div class="bg-slate-950 p-2.5 rounded border border-slate-800">
+              <span class="text-slate-500 block">Time Constant (&tau;):</span>
+              <span id="lblTauValue" class="text-amber-400 font-bold text-sm">-- s</span>
+            </div>
+            <div class="bg-slate-950 p-2.5 rounded border border-slate-800">
+              <span class="text-slate-500 block">Goodness of Fit ($R^2$):</span>
+              <span id="lblTauR2" class="text-emerald-400 font-bold text-sm">--</span>
+            </div>
+            <div class="bg-slate-950 p-2.5 rounded border border-slate-800">
+              <span class="text-slate-500 block">Thermal Resistance ($R_{\text{th}}$):</span>
+              <span id="lblRthValue" class="text-sky-400 font-bold text-sm">-- K/W</span>
+            </div>
+            <div class="bg-slate-950 p-2.5 rounded border border-slate-800">
+              <span class="text-slate-500 block">Thermal Capacitance ($C_{\text{th}}$):</span>
+              <span id="lblCthValue" class="text-fuchsia-400 font-bold text-sm">-- J/K</span>
+            </div>
+          </div>
+
+          <!-- Interactive Decay Curve & Regression Plot -->
+          <div class="bg-slate-950 p-3 rounded border border-slate-800">
+            <h4 class="text-[11px] font-bold font-mono text-slate-400 mb-2">TRANSIENT DECAY CURVE WITH EXPONENTIAL FIT</h4>
+            <div id="tauDecayPlot" class="w-full h-64"></div>
+          </div>
+        </div>
+      </details>
     </div>
   </div>
 
