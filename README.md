@@ -109,5 +109,15 @@ The client components expect a JSON endpoint returning:
 
 ---
 
+## Technical Specifications & Theoretical Whitepaper
+
+To read the full theoretical foundation of the FLIR Radiometric Web Platform, including all 9 core analytical modules, use the link below:
+
+[View the Technical Specifications & Whitepaper](https://tinyurl.com/2hwfsrsn)
+
+> The document is available in view-only mode.
+
+---
+
 ## License & Contribution
 Maintains project repository license and contribution guidelines.

@@ -685,6 +685,7 @@ function exportSelectedCSV() {
   });
 }
 // --- STRUCTURED JSON REPORT EXPORTER ---
+// --- COMPREHENSIVE STRUCTURED JSON REPORT EXPORTER ---
 async function exportLabReportJSON() {
   if (activeInspectedIdx === null || !frameBuffer[activeInspectedIdx]) {
     alert("Select a frame from the gallery to generate a lab report.");
@@ -693,77 +694,134 @@ async function exportLabReportJSON() {
 
   const frame = frameBuffer[activeInspectedIdx];
   const matrix = frame.calibratedMatrix;
-  const sensitivity = parseFloat(document.getElementById("cfgHotspotSensitivity").value);
-  const emissivity = parseFloat(document.getElementById("cfgEmissivity").value);
-
+  const rawMatrix = frame.rawMatrix;
+  const sensitivity = parseFloat(document.getElementById("cfgHotspotSensitivity")?.value) || 2.0;
+  const emissivity = parseFloat(document.getElementById("cfgEmissivity")?.value) || 0.95;
   const roi = detectHotspotROI(matrix, sensitivity);
 
-  // Read Differential Point Coordinates
-  const p1x = parseInt(document.getElementById("pt1X").value) || 0;
-  const p1y = parseInt(document.getElementById("pt1Y").value) || 0;
-  const p2x = parseInt(document.getElementById("pt2X").value) || 0;
-  const p2y = parseInt(document.getElementById("pt2Y").value) || 0;
-
+  // 1. Differential Points
+  const p1x = parseInt(document.getElementById("pt1X")?.value) || 0;
+  const p1y = parseInt(document.getElementById("pt1Y")?.value) || 0;
+  const p2x = parseInt(document.getElementById("pt2X")?.value) || 0;
+  const p2y = parseInt(document.getElementById("pt2Y")?.value) || 0;
   const tempP1 = matrix[p1y] ? matrix[p1y][p1x] : 0;
   const tempP2 = matrix[p2y] ? matrix[p2y][p2x] : 0;
   const deltaT = Math.abs(tempP1 - tempP2);
 
-  // Read Isothermal Mask Metrics
+  // 2. Isothermal Masking
   const isIsoEnabled = document.getElementById("chkEnableIso")?.checked || false;
   const isoMin = parseFloat(document.getElementById("isoMinTemp")?.value) || 33.0;
   const isoMax = parseFloat(document.getElementById("isoMaxTemp")?.value) || 35.0;
   const isoResult = isIsoEnabled ? computeIsothermMask(matrix, isoMin, isoMax) : null;
 
-  // Capture Base64 Rendered Images from Canvases
-  const heatmapImgUrl = await Plotly.toImage('thermalPlot', { format: 'png', width: 800, height: 500 });
-  const gradientImgUrl = await Plotly.toImage('gradientPlot', { format: 'png', width: 800, height: 500 });
-
-  const reportObject = {
-    reportMetadata: {
-      generatedAt: new Date().toISOString(),
-      softwareVersion: "FLIR Radiometric Processing Unit v2.4",
-      frameTimestamp: frame.timestamp,
-      frameIndex: frame.id + 1
-    },
-    radiometricParameters: {
-      emissivity: emissivity,
-      hotspotCutoffMultiplier: sensitivity,
-      matrixDimensions: { rows: matrix.length, cols: matrix[0].length }
-    },
-    statisticalSummary: {
-      minTemperatureDegC: parseFloat(roi.minTemp.toFixed(2)),
-      maxTemperatureDegC: parseFloat(roi.peakTemp.toFixed(2)),
-      meanTemperatureDegC: parseFloat(roi.meanTemp.toFixed(2)),
-      standardDeviationDegC: parseFloat(roi.stdDev.toFixed(2))
-    },
-    differentialPointAnalysis: {
-      point1: { x: p1x, y: p1y, temperatureDegC: parseFloat(tempP1.toFixed(2)) },
-      point2: { x: p2x, y: p2y, temperatureDegC: parseFloat(tempP2.toFixed(2)) },
-      deltaTDegC: parseFloat(deltaT.toFixed(2))
-    },
-    isothermalMaskAnalysis: {
-      enabled: isIsoEnabled,
-      temperatureRangeDegC: { min: isoMin, max: isoMax },
-      matchingPixelCount: isoResult ? isoResult.matchCount : 0,
-      surfaceAreaPercentage: isoResult ? parseFloat(isoResult.areaPercentage.toFixed(2)) : 0.0
-    },
-    renderedImageArtifacts: {
-      heatmapPngBase64: heatmapImgUrl,
-      spatialGradientPngBase64: gradientImgUrl
-    }
+  // 3. ASTM Radiometric Atmosphere & Window Settings
+  const isAstm = document.getElementById("chkEnableAstm")?.checked || false;
+  const astmConfig = {
+    enabled: isAstm,
+    targetDistanceMeters: parseFloat(document.getElementById("cfgDistance")?.value) || 1.5,
+    relativeHumidityPct: parseFloat(document.getElementById("cfgHumidity")?.value) || 50.0,
+    atmosphericTempC: parseFloat(document.getElementById("cfgAtmTemp")?.value) || 20.0,
+    reflectedTempC: parseFloat(document.getElementById("cfgReflTemp")?.value) || 20.0,
+    windowTransmittance: parseFloat(document.getElementById("cfgWinTrans")?.value) || 1.0,
+    windowTempC: parseFloat(document.getElementById("cfgWinTemp")?.value) || 20.0,
+    calculatedAtmosphericTransmittance: frame.tau_atm || 1.0,
+    totalOpticalGain: frame.total_opt_gain || 1.0
   };
 
-  // Trigger JSON file download
-  const blob = new Blob([JSON.stringify(reportObject, null, 2)], { type: "application/json" });
+  // 4. Adaptive Emissivity Zoning & Spatial Bilateral Filter Settings
+  const isZoning = document.getElementById("chkEnableZoning")?.checked || false;
+  const isBilateral = document.getElementById("chkEnableBilateral")?.checked || false;
+  const filterConfig = {
+    zoningEnabled: isZoning,
+    activeZones: isZoning ? activeEmissivityZones : [],
+    bilateralDenoisingEnabled: isBilateral,
+    filterRadius: parseInt(document.getElementById("cfgFilterRadius")?.value) || 2,
+    sigmaSpace: parseFloat(document.getElementById("cfgSigmaSpace")?.value) || 2.5,
+    sigmaColor: parseFloat(document.getElementById("cfgSigmaColor")?.value) || 1.2
+  };
+
+  // 5. 1D Cross-Section Profile
+  const sliceOrientation = document.getElementById("sliceOrientation")?.value || "horizontal";
+  const sliceIndex = parseInt(document.getElementById("sliceIndex")?.value) || 0;
+  const sliceData = sliceOrientation === "horizontal"
+    ? (matrix[Math.min(matrix.length - 1, sliceIndex)] || [])
+    : matrix.map(row => row[Math.min(row.length - 1, sliceIndex)]);
+
+  // 6. Capture Base64 Visual Artifacts
+  const safeCapture = async (elementId, w = 700, h = 450) => {
+    try {
+      const el = document.getElementById(elementId);
+      if (el && el.data && el.data.length > 0) {
+        return await Plotly.toImage(elementId, { format: 'png', width: w, height: h });
+      }
+    } catch (e) {
+      console.warn(`Could not capture image for ${elementId}`, e);
+    }
+    return null;
+  };
+
+  const imageArtifacts = {
+    radiometricHeatmapPng: await safeCapture('thermalPlot'),
+    spatialGradientPng: await safeCapture('gradientPlot'),
+    surfaceTopography3DPng: await safeCapture('surface3DPlot'),
+    lineProfilePng: await safeCapture('lineProfilePlot', 700, 300),
+    astmOffsetPng: isAstm ? await safeCapture('astmCorrectionPlot', 700, 300) : null,
+    pptPhasePng: await safeCapture('pptPhasePlot'),
+    pptAmplitudePng: await safeCapture('pptAmpPlot'),
+    tsrDerivativesPng: await safeCapture('tsrDerivativePlot', 700, 350),
+    pctSpatialModePng: await safeCapture('pctSpatialPlot'),
+    pctScreeSpectrumPng: await safeCapture('pctScreePlot')
+  };
+
+  const fullReport = {
+    reportMetadata: {
+      generatedAt: new Date().toISOString(),
+      softwareVersion: "FLIR Radiometric Analytical Platform v3.0",
+      frameIdentifier: frame.timestamp,
+      frameIndex: frame.id + 1,
+      totalFramesInBuffer: frameBuffer.length
+    },
+    statisticalAnalysis: {
+      minTemperatureC: parseFloat(roi.minTemp.toFixed(3)),
+      maxTemperatureC: parseFloat(roi.peakTemp.toFixed(3)),
+      meanTemperatureC: parseFloat(roi.meanTemp.toFixed(3)),
+      standardDeviationSigma: parseFloat(roi.stdDev.toFixed(3)),
+      hotspotIdentified: roi.hasHotspot,
+      hotspotBoundingBox: roi.bbox,
+      hotspotPeakCoordinate: roi.peakCoord
+    },
+    differentialAnalysis: {
+      point1: { x: p1x, y: p1y, temperatureC: parseFloat(tempP1.toFixed(3)) },
+      point2: { x: p2x, y: p2y, temperatureC: parseFloat(tempP2.toFixed(3)) },
+      deltaTC: parseFloat(deltaT.toFixed(3))
+    },
+    isothermalMasking: {
+      enabled: isIsoEnabled,
+      temperatureRangeC: { min: isoMin, max: isoMax },
+      matchedPixelCount: isoResult ? isoResult.matchCount : 0,
+      surfaceAreaCoveragePct: isoResult ? parseFloat(isoResult.areaPercentage.toFixed(2)) : 0.0
+    },
+    crossSectionProfile: {
+      orientation: sliceOrientation,
+      index: sliceIndex,
+      temperatureProfile: sliceData
+    },
+    radiometricPhysicsAndOptics: astmConfig,
+    materialZoningAndFiltering: filterConfig,
+    calibratedMatrixData: matrix,
+    rawSensorMatrixData: rawMatrix,
+    visualArtifacts: imageArtifacts
+  };
+
+  const blob = new Blob([JSON.stringify(fullReport, null, 2)], { type: "application/json" });
   const downloadLink = document.createElement("a");
   downloadLink.href = URL.createObjectURL(blob);
-  downloadLink.download = `thermal_lab_report_frame_${frame.id + 1}_${Date.now()}.json`;
+  downloadLink.download = `FLIR_Full_Diagnostic_Report_Frame_${frame.id + 1}_${Date.now()}.json`;
   document.body.appendChild(downloadLink);
   downloadLink.click();
   downloadLink.remove();
 }
 
-// --- PRINTABLE HTML / PDF REPORT GENERATOR ---
 async function generatePrintableLabReport() {
   if (activeInspectedIdx === null || !frameBuffer[activeInspectedIdx]) {
     alert("Select a frame from the gallery to generate a lab report.");
@@ -772,64 +830,221 @@ async function generatePrintableLabReport() {
 
   const frame = frameBuffer[activeInspectedIdx];
   const matrix = frame.calibratedMatrix;
-  const sensitivity = parseFloat(document.getElementById("cfgHotspotSensitivity").value);
-  const emissivity = parseFloat(document.getElementById("cfgEmissivity").value);
-
+  const sensitivity = parseFloat(document.getElementById("cfgHotspotSensitivity")?.value) || 2.0;
+  const emissivity = parseFloat(document.getElementById("cfgEmissivity")?.value) || 0.95;
   const roi = detectHotspotROI(matrix, sensitivity);
 
-  const p1x = parseInt(document.getElementById("pt1X").value) || 0;
-  const p1y = parseInt(document.getElementById("pt1Y").value) || 0;
-  const p2x = parseInt(document.getElementById("pt2X").value) || 0;
-  const p2y = parseInt(document.getElementById("pt2Y").value) || 0;
-
+  const p1x = parseInt(document.getElementById("pt1X")?.value) || 0;
+  const p1y = parseInt(document.getElementById("pt1Y")?.value) || 0;
+  const p2x = parseInt(document.getElementById("pt2X")?.value) || 0;
+  const p2y = parseInt(document.getElementById("pt2Y")?.value) || 0;
   const tempP1 = matrix[p1y] ? matrix[p1y][p1x] : 0;
   const tempP2 = matrix[p2y] ? matrix[p2y][p2x] : 0;
   const deltaT = Math.abs(tempP1 - tempP2);
 
-  const heatmapImgUrl = await Plotly.toImage('thermalPlot', { format: 'png', width: 600, height: 400 });
-  const gradientImgUrl = await Plotly.toImage('gradientPlot', { format: 'png', width: 600, height: 400 });
+  const isIsoEnabled = document.getElementById("chkEnableIso")?.checked || false;
+  const isoMin = parseFloat(document.getElementById("isoMinTemp")?.value) || 33.0;
+  const isoMax = parseFloat(document.getElementById("isoMaxTemp")?.value) || 35.0;
+  const isoResult = isIsoEnabled ? computeIsothermMask(matrix, isoMin, isoMax) : null;
+
+  const isAstm = document.getElementById("chkEnableAstm")?.checked || false;
+  const isZoning = document.getElementById("chkEnableZoning")?.checked || false;
+  const isBilateral = document.getElementById("chkEnableBilateral")?.checked || false;
+
+  const safeCapture = async (elementId, w = 550, h = 350) => {
+    try {
+      const el = document.getElementById(elementId);
+      if (el && el.data && el.data.length > 0) {
+        return await Plotly.toImage(elementId, { format: 'png', width: w, height: h });
+      }
+    } catch (e) {
+      console.warn(`Could not capture image for ${elementId}`, e);
+    }
+    return null;
+  };
+
+  // Capture all analytical views
+  const [
+    heatmapImg,
+    gradImg,
+    surfaceImg,
+    lineImg,
+    astmImg,
+    pptPhaseImg,
+    pptAmpImg,
+    tsrImg,
+    pctSpatialImg,
+    pctScreeImg
+  ] = await Promise.all([
+    safeCapture('thermalPlot'),
+    safeCapture('gradientPlot'),
+    safeCapture('surface3DPlot'),
+    safeCapture('lineProfilePlot', 550, 240),
+    isAstm ? safeCapture('astmCorrectionPlot', 550, 240) : Promise.resolve(null),
+    safeCapture('pptPhasePlot'),
+    safeCapture('pptAmpPlot'),
+    safeCapture('tsrDerivativePlot', 550, 260),
+    safeCapture('pctSpatialPlot'),
+    safeCapture('pctScreePlot')
+  ]);
 
   const reportWindow = window.open('', '_blank');
   reportWindow.document.write(`
     <!DOCTYPE html>
-    <html>
+    <html lang="en">
     <head>
-      <title>Thermal Diagnostic Report - Frame ${frame.id + 1}</title>
+      <meta charset="UTF-8">
+      <title>FLIR Full Research Diagnostic Report - Frame ${frame.id + 1}</title>
       <style>
-        body { font-family: monospace; padding: 20px; background: #ffffff; color: #1e293b; }
-        h1 { font-size: 18px; border-bottom: 2px solid #0f172a; padding-bottom: 8px; }
-        .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 20px; }
-        table { width: 100%; border-collapse: collapse; margin-top: 10px; font-size: 12px; }
-        th, td { border: 1px solid #cbd5e1; padding: 6px 10px; text-align: left; }
-        th { background: #f8fafc; }
-        img { width: 100%; border: 1px solid #cbd5e1; }
+        @page { size: A4; margin: 15mm; }
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, monospace; color: #0f172a; background: #ffffff; margin: 0; padding: 10px; font-size: 11px; }
+        .header { display: flex; justify-content: space-between; align-items: flex-end; border-bottom: 2px solid #0f172a; padding-bottom: 8px; margin-bottom: 12px; }
+        h1 { font-size: 16px; margin: 0; text-transform: uppercase; letter-spacing: 0.5px; }
+        h2 { font-size: 12px; margin: 14px 0 6px 0; border-bottom: 1px solid #cbd5e1; padding-bottom: 3px; text-transform: uppercase; color: #1e293b; }
+        .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+        .grid-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; }
+        table { width: 100%; border-collapse: collapse; margin-top: 4px; margin-bottom: 8px; }
+        th, td { border: 1px solid #cbd5e1; padding: 4px 8px; text-align: left; }
+        th { background: #f1f5f9; font-weight: 600; }
+        .figure-card { border: 1px solid #cbd5e1; border-radius: 4px; padding: 6px; background: #f8fafc; page-break-inside: avoid; margin-bottom: 8px; }
+        .figure-card h3 { font-size: 10px; margin: 0 0 4px 0; text-transform: uppercase; color: #475569; }
+        .figure-card img { width: 100%; height: auto; display: block; border: 1px solid #e2e8f0; border-radius: 2px; }
+        .badge { display: inline-block; padding: 2px 6px; border-radius: 3px; font-size: 10px; font-weight: bold; background: #e2e8f0; }
+        .page-break { page-break-before: always; }
       </style>
     </head>
     <body>
-      <h1>RADIOMETRIC THERMAL DIAGNOSTIC REPORT</h1>
-      <p><strong>Frame Identifier:</strong> ${frame.timestamp} | <strong>Emissivity:</strong> ${emissivity}</p>
-      
-      <table>
-        <tr><th>Metric</th><th>Value</th></tr>
-        <tr><td>Min Temperature</td><td>${roi.minTemp.toFixed(2)} deg C</td></tr>
-        <tr><td>Max Temperature (Peak)</td><td>${roi.peakTemp.toFixed(2)} deg C</td></tr>
-        <tr><td>Mean Temperature</td><td>${roi.meanTemp.toFixed(2)} deg C</td></tr>
-        <tr><td>Standard Deviation (sigma)</td><td>${roi.stdDev.toFixed(2)} deg C</td></tr>
-        <tr><td>Differential Delta T (P1 vs P2)</td><td>${deltaT.toFixed(2)} deg C</td></tr>
-      </table>
-
-      <div class="grid" style="margin-top: 20px;">
+      <div class="header">
         <div>
-          <h3>Radiometric Heatmap</h3>
-          <img src="${heatmapImgUrl}" />
+          <h1>FLIR Radiometric Diagnostic Lab Report</h1>
+          <div style="color: #64748b; font-size: 10px;">Edge Ingestion, Multi-Parameter Calibration, Spatial Gradient & NDT Analysis</div>
         </div>
-        <div>
-          <h3>Spatial Thermal Gradient</h3>
-          <img src="${gradientImgUrl}" />
+        <div style="text-align: right; font-family: monospace;">
+          <div><strong>Frame:</strong> #${frame.id + 1} (${frame.timestamp})</div>
+          <div><strong>Generated:</strong> ${new Date().toLocaleString()}</div>
         </div>
       </div>
-      
-      <script>window.onload = function() { window.print(); };<\/script>
+
+      <!-- SECTION 1: STATISTICAL METRICS & DIFFERENTIAL POINT ANALYSIS -->
+      <h2>1. Diagnostic Summary & Radiometric Physics</h2>
+      <div class="grid-2">
+        <table>
+          <tr><th colspan="2">Statistical Temperature Field</th></tr>
+          <tr><td>Scene Min Temperature</td><td><strong>${roi.minTemp.toFixed(2)} &deg;C</strong></td></tr>
+          <tr><td>Scene Max Temperature (Peak)</td><td><strong>${roi.peakTemp.toFixed(2)} &deg;C</strong></td></tr>
+          <tr><td>Scene Mean Temperature (&mu;)</td><td>${roi.meanTemp.toFixed(2)} &deg;C</td></tr>
+          <tr><td>Standard Deviation (&sigma;)</td><td>${roi.stdDev.toFixed(2)} &deg;C</td></tr>
+          <tr><td>Hotspot Threshold (&mu; + ${sensitivity}&sigma;)</td><td>${roi.threshold.toFixed(2)} &deg;C (${roi.hasHotspot ? 'HOTSPOT DETECTED' : 'NOMINAL'})</td></tr>
+        </table>
+
+        <table>
+          <tr><th colspan="2">Differential Probe & Calibration Setup</th></tr>
+          <tr><td>Point 1 (${p1x}, ${p1y})</td><td><strong>${tempP1.toFixed(2)} &deg;C</strong></td></tr>
+          <tr><td>Point 2 (${p2x}, ${p2y})</td><td><strong>${tempP2.toFixed(2)} &deg;C</strong></td></tr>
+          <tr><td>Differential Delta T (|P1 - P2|)</td><td><strong>${deltaT.toFixed(2)} &deg;C</strong></td></tr>
+          <tr><td>Surface Baseline Emissivity (&epsilon;)</td><td>${emissivity}</td></tr>
+          <tr><td>ASTM Atmospheric Correction</td><td>${isAstm ? `Active (&tau;_atm = ${(frame.tau_atm || 1.0).toFixed(3)})` : 'Disabled'}</td></tr>
+        </table>
+      </div>
+
+      <!-- SECTION 2: CONFIGURATION DETAILS -->
+      <div class="grid-3" style="font-size: 10px; margin-top: 4px;">
+        <div class="figure-card">
+          <h3>Isothermal Masking</h3>
+          <div><strong>Status:</strong> ${isIsoEnabled ? 'Enabled' : 'Disabled'}</div>
+          <div><strong>Band:</strong> ${isoMin.toFixed(1)} &deg;C &ndash; ${isoMax.toFixed(1)} &deg;C</div>
+          <div><strong>Coverage:</strong> ${isoResult ? isoResult.areaPercentage.toFixed(2) : '0.00'}% (${isoResult ? isoResult.matchCount : 0} px)</div>
+        </div>
+        <div class="figure-card">
+          <h3>Adaptive Emissivity Zoning</h3>
+          <div><strong>Status:</strong> ${isZoning ? 'Active' : 'Disabled'}</div>
+          <div><strong>Custom Zones:</strong> ${activeEmissivityZones.length} defined</div>
+          <div><strong>Bilateral Filter:</strong> ${isBilateral ? 'Active (Denoised)' : 'Bypassed'}</div>
+        </div>
+        <div class="figure-card">
+          <h3>1D Cross-Section Profile</h3>
+          <div><strong>Orientation:</strong> ${document.getElementById("sliceOrientation")?.value || "horizontal"}</div>
+          <div><strong>Slice Index:</strong> ${document.getElementById("sliceIndex")?.value || "0"}</div>
+          <div><strong>Dimensions:</strong> ${matrix[0].length} &times; ${matrix.length} px</div>
+        </div>
+      </div>
+
+      <!-- SECTION 3: 2D CANVASES & TOPOGRAPHY -->
+      <h2>2. Spatial & Topographic Visualizations</h2>
+      <div class="grid-2">
+        <div class="figure-card">
+          <h3>Radiometric Heatmap (&deg;C)</h3>
+          ${heatmapImg ? `<img src="${heatmapImg}">` : '<div style="padding:40px;text-align:center;">Plot not rendered</div>'}
+        </div>
+        <div class="figure-card">
+          <h3>Signed Spatial Thermal Gradient (dT &deg;C)</h3>
+          ${gradImg ? `<img src="${gradImg}">` : '<div style="padding:40px;text-align:center;">Plot not rendered</div>'}
+        </div>
+      </div>
+
+      <div class="grid-2">
+        <div class="figure-card">
+          <h3>3D Thermal Surface Topography</h3>
+          ${surfaceImg ? `<img src="${surfaceImg}">` : '<div style="padding:40px;text-align:center;">Plot not rendered</div>'}
+        </div>
+        <div class="figure-card">
+          <h3>1D Cross-Section Profile</h3>
+          ${lineImg ? `<img src="${lineImg}">` : '<div style="padding:40px;text-align:center;">Plot not rendered</div>'}
+        </div>
+      </div>
+
+      <!-- PAGE BREAK FOR ADVANCED RESEARCH MODULES -->
+      <div class="page-break"></div>
+
+      <div class="header">
+        <div>
+          <h1>Advanced NDT & Multi-Parameter Research Analysis</h1>
+          <div style="color: #64748b; font-size: 10px;">Pulsed Phase Thermography (PPT), TSR Derivatives & PCT Modes</div>
+        </div>
+        <div style="text-align: right; font-family: monospace;">Frame #${frame.id + 1}</div>
+      </div>
+
+      <!-- SECTION 4: TEMPORAL NDT & TSR -->
+      <h2>3. Temporal NDT (Pulsed Phase Thermography & TSR)</h2>
+      <div class="grid-2">
+        <div class="figure-card">
+          <h3>PPT Phase Map (&phi; in Radians) &mdash; Subsurface Defect Isolation</h3>
+          ${pptPhaseImg ? `<img src="${pptPhaseImg}">` : '<div style="padding:40px;text-align:center;color:#94a3b8;">Execute PPT module to populate</div>'}
+        </div>
+        <div class="figure-card">
+          <h3>PPT Amplitude Map (A in Arbitrary Units)</h3>
+          ${pptAmpImg ? `<img src="${pptAmpImg}">` : '<div style="padding:40px;text-align:center;color:#94a3b8;">Execute PPT module to populate</div>'}
+        </div>
+      </div>
+      <div class="figure-card">
+        <h3>TSR Point Profile & 1st/2nd Time Derivatives at P1 (Cooling Velocity & Inflection)</h3>
+        ${tsrImg ? `<img src="${tsrImg}">` : '<div style="padding:20px;text-align:center;color:#94a3b8;">Execute PPT/TSR module to populate</div>'}
+      </div>
+
+      <!-- SECTION 5: PRINCIPAL COMPONENT THERMOGRAPHY (PCT) & ASTM CALIBRATION -->
+      <h2>4. Principal Component Thermography (PCT) & ASTM Offset</h2>
+      <div class="grid-2">
+        <div class="figure-card">
+          <h3>PCT Spatial Eigen-Surface Map (Active EOF Mode)</h3>
+          ${pctSpatialImg ? `<img src="${pctSpatialImg}">` : '<div style="padding:40px;text-align:center;color:#94a3b8;">Execute PCT module to populate</div>'}
+        </div>
+        <div class="figure-card">
+          <h3>Eigenvalue Spectrum (% Variance Explained)</h3>
+          ${pctScreeImg ? `<img src="${pctScreeImg}">` : '<div style="padding:40px;text-align:center;color:#94a3b8;">Execute PCT module to populate</div>'}
+        </div>
+      </div>
+
+      ${isAstm && astmImg ? `
+      <div class="figure-card">
+        <h3>ASTM Calibration Offset Map (&Delta;T = T_corrected - T_raw &deg;C)</h3>
+        <img src="${astmImg}">
+      </div>` : ''}
+
+      <script>
+        window.onload = function() {
+          setTimeout(function() { window.print(); }, 500);
+        };
+      <\/script>
     </body>
     </html>
   `);
