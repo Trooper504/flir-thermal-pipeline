@@ -69,7 +69,7 @@ class RealFlirCamera:
     Interfaces with physical FLIR E8-XT storage mounted on Pi, 
     or falls back to local sample_flir.jpg if running offline.
     """
-    def __init__(self, camera_mount_path="/media/pi/FLIR/DCIM/100FLIR/"):
+    def __init__(self, camera_mount_path="/media/raspberrypi_local/07F5-01A9/DCIM/100_FLIR "):
         self.mount_path = camera_mount_path
         self.extractor = FlirExtractorNative()
 
