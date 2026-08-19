@@ -254,8 +254,23 @@ function replotActiveCanvas() {
   if (activeInspectedIdx !== null) inspectFrame(activeInspectedIdx);
 }
 
-// --- STREAM INGESTION ---
+// --- STREAM & INGESTION CONTROLLER ---
+let lastCapturedMtime = 0;
+
+function getApiEndpoint() {
+  const inputEl = document.getElementById("cfgApiUrl");
+  let url = inputEl ? inputEl.value.trim() : "";
+  if (!url) url = "http://localhost:8081";
+  url = url.replace(/\/+$/, "");
+  // Ensure the endpoint path is attached
+  if (!url.endsWith("/api/v1/thermal-frame")) {
+    url += "/api/v1/thermal-frame";
+  }
+  return url;
+}
+
 function startImportStream() {
+  if (isImporting) return;
   isImporting = true;
   document.getElementById("btnImport").disabled = true;
   document.getElementById("btnImport").classList.add("opacity-50", "cursor-not-allowed");
@@ -274,6 +289,7 @@ function startImportStream() {
 function stopImportStream() {
   isImporting = false;
   if (importIntervalId) clearInterval(importIntervalId);
+  importIntervalId = null;
 
   document.getElementById("btnImport").disabled = false;
   document.getElementById("btnImport").classList.remove("opacity-50", "cursor-not-allowed");
@@ -289,17 +305,27 @@ async function ingestFrame() {
   const sourceMode = document.getElementById("cfgDataSource").value;
   let rawMatrix = null;
   let width = 80, height = 60;
+  let filename = `Shot_${new Date().toLocaleTimeString()}`;
 
   if (sourceMode === "pi") {
-    const url = document.getElementById("cfgApiUrl").value;
+    const endpoint = `${getApiEndpoint()}?if_modified_since=${lastCapturedMtime}`;
     try {
-      const res = await fetch(url);
+      const res = await fetch(endpoint);
+      if (res.status === 204) {
+        // No new capture on camera, ignore duplicate polling
+        return;
+      }
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+
       const json = await res.json();
       rawMatrix = json.data;
       width = json.width;
       height = json.height;
+      if (json.filename) filename = json.filename;
+      if (json.mtime) lastCapturedMtime = json.mtime;
     } catch (err) {
-      console.error("Fetch error:", err);
+      console.warn("Fetch error:", err);
+      document.getElementById("statusBadge").innerText = "PI CONNECTION ERROR";
       return;
     }
   } else if (sourceMode === "simulation") {
@@ -308,58 +334,26 @@ async function ingestFrame() {
     return;
   }
 
-  const currentEmissivity = parseFloat(document.getElementById("cfgEmissivity").value);
+  if (!rawMatrix || !rawMatrix.length) return;
+
   const frameData = {
     id: frameBuffer.length,
-    timestamp: new Date().toLocaleTimeString(),
+    timestamp: filename,
     rawMatrix: rawMatrix,
-    calibratedMatrix: applyPlanckRecalibration(rawMatrix, currentEmissivity, 20.0, 0.95),
+    calibratedMatrix: rawMatrix, // Python already performed baseline Planck calibration
     width: width,
     height: height
   };
-  
+
   frameBuffer.push(frameData);
   saveFrameToDatabase(frameData);
 
   document.getElementById("lblFrameCount").innerText = frameBuffer.length;
   appendThumbnailToGallery(frameData);
-}async function ingestFrame() {
-  const sourceMode = document.getElementById("cfgDataSource").value;
-  let rawMatrix = null;
-  let width = 80, height = 60;
 
-  if (sourceMode === "pi") {
-    const url = document.getElementById("cfgApiUrl").value;
-    try {
-      const res = await fetch(url);
-      const json = await res.json();
-      rawMatrix = json.data;
-      width = json.width;
-      height = json.height;
-    } catch (err) {
-      console.error("Fetch error:", err);
-      return;
-    }
-  } else if (sourceMode === "simulation") {
-    rawMatrix = generateMockThermalMatrix(60, 80);
-  } else {
-    return;
+  if (activeInspectedIdx === null) {
+    inspectFrame(frameData.id);
   }
-
-  const frameData = {
-    id: frameBuffer.length,
-    timestamp: new Date().toLocaleTimeString(),
-    rawMatrix: rawMatrix,
-    calibratedMatrix: calibrateFrameMatrix(rawMatrix),
-    width: width,
-    height: height
-  };
-  
-  frameBuffer.push(frameData);
-  saveFrameToDatabase(frameData);
-
-  document.getElementById("lblFrameCount").innerText = frameBuffer.length;
-  appendThumbnailToGallery(frameData);
 }
 
 function appendThumbnailToGallery(frame) {

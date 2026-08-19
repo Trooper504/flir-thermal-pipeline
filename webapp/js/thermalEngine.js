@@ -83,7 +83,7 @@ function applyAstmCalibration(matrix, params) {
 }
 
 // --- SPATIAL THERMAL GRADIENT (Center - Neighbor Avg Convolution) ---
-function computeGradient2D(matrix) {
+function computeGradient2D(matrix) {// this is for computing the 2D gradient of the imported matrix
   const rows = matrix.length;
   const cols = matrix[0].length;
   let grad = Array.from({ length: rows }, () => new Array(cols).fill(0));
