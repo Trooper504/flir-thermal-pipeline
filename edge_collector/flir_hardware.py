@@ -12,8 +12,8 @@ from PIL import Image
 class FlirExtractorNative:
     """Native FLIR thermal extractor using ExifTool.
 
-    Parses 16-bit raw detector counts and applies standard FLIR Planck
-    calibration.
+    Parses 16-bit raw detector counts with big-endian byte-swapping
+    and applies dynamic FLIR Planck calibration.
     """
 
     def __init__(self, exiftool_path="exiftool"):
@@ -57,13 +57,13 @@ class FlirExtractorNative:
         ) + (1.0 - X) * np.exp(-sqrt_d * (alpha2 + beta2 * h2o_term))
         return float(np.clip(tau, 0.1, 1.0))
 
-def extract_thermal_matrix(self, image_path: str) -> np.ndarray:
+    def extract_thermal_matrix(self, image_path: str) -> np.ndarray:
         if not os.path.exists(image_path):
             raise FileNotFoundError(f"Thermal image not found: {image_path}")
 
         meta = self.get_metadata(image_path)
 
-        # 1. Read Per-Camera Calibration Constants Dynamically
+        # 1. Dynamic Per-Camera Calibration Constants
         R1 = self._clean_float(meta.get("PlanckR1"), 13614.67)
         R2 = self._clean_float(meta.get("PlanckR2"), 0.02569)
         B = self._clean_float(meta.get("PlanckB"), 1371.30)
@@ -83,29 +83,29 @@ def extract_thermal_matrix(self, image_path: str) -> np.ndarray:
 
         tau_atm = self._compute_tau_atm(distance, humidity, T_atm - 273.15)
 
-        # 2. Extract Raw Binary Stream
+        # 2. Extract Raw Binary Chunk
         cmd = [self.exiftool_path, "-b", "-RawThermalImage", image_path]
         result = subprocess.run(
             cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE
         )
         if not result.stdout:
             raise ValueError(
-                f"No RawThermalImage chunk found in {image_path}. Check file"
-                " integrity."
+                f"No RawThermalImage chunk found in {image_path}."
             )
 
         raw_bytes = result.stdout
 
-        # 3. Clean Native 16-Bit Raw Detector Count Ingestion
+        # 3. 16-Bit Raw Detector Ingestion with Big-Endian Byte-Swap
         try:
             img = Image.open(io.BytesIO(raw_bytes))
-            # Native array conversion directly preserves valid uint16 ADC counts
-            raw_matrix = np.array(img, dtype=np.float32)
+            raw_matrix = (
+                np.array(img, dtype=np.uint16).byteswap().astype(np.float32)
+            )
         except Exception:
             w = int(meta.get("RawThermalImageWidth", 320))
             h = int(meta.get("RawThermalImageHeight", 240))
             raw_matrix = (
-                np.frombuffer(raw_bytes, dtype="<u2")
+                np.frombuffer(raw_bytes, dtype=">u2")
                 .reshape((h, w))
                 .astype(np.float32)
             )
@@ -117,113 +117,19 @@ def extract_thermal_matrix(self, image_path: str) -> np.ndarray:
         S_refl = R1 / (R2 * (np.exp(B / T_refl) - F)) - O
         S_atm = R1 / (R2 * (np.exp(B / T_atm) - F)) - O
 
+        # Isolate object radiance
         S_obj = (
             raw_matrix
             - (1.0 - E) * tau_atm * S_refl
             - (1.0 - tau_atm) * S_atm
         ) / (E * tau_atm)
 
-        # 5. Invert Planck Radiative Equation
+        # 5. Invert Planck Equation
         val = R1 / (R2 * (S_obj + O)) + F
         val = np.maximum(val, 1.0001)
 
         temp_kelvin = B / np.log(val)
         temp_celsius = temp_kelvin - 273.15
-
-        return np.round(temp_celsius, 2)
-        if not os.path.exists(image_path):
-            raise FileNotFoundError(f"Thermal image not found: {image_path}")
-
-        meta = self.get_metadata(image_path)
-
-        # 1. Read Calibration Constants (Strict extraction with realistic fallbacks)
-        R1 = self._clean_float(meta.get("PlanckR1"), 17096.45)
-        R2 = self._clean_float(meta.get("PlanckR2"), 0.048085)
-        B = self._clean_float(meta.get("PlanckB"), 1428.0)
-        F = self._clean_float(meta.get("PlanckF"), 1.0)
-        O = self._clean_float(meta.get("PlanckO"), -370.0)
-
-        E = self._clean_float(meta.get("Emissivity"), 0.95)
-        T_refl = (
-            self._clean_float(meta.get("ReflectedApparentTemperature"), 20.0)
-            + 273.15
-        )
-        T_atm = (
-            self._clean_float(meta.get("AtmosphericTemperature"), 20.0) + 273.15
-        )
-        distance = self._clean_float(meta.get("ObjectDistance"), 1.0)
-        humidity = self._clean_float(meta.get("RelativeHumidity"), 50.0)
-
-        tau_atm = self._compute_tau_atm(distance, humidity, T_atm - 273.15)
-
-        # 2. Extract Raw 16-bit Binary Chunk
-        cmd = [self.exiftool_path, "-b", "-RawThermalImage", image_path]
-        result = subprocess.run(
-            cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE
-        )
-        if not result.stdout:
-            raise ValueError(
-                f"No RawThermalImage chunk found in {image_path}. Check file"
-                " integrity."
-            )
-
-        raw_bytes = result.stdout
-        raw_type = str(meta.get("RawThermalImageType", "")).upper()
-
-        # 3. Robust 16-Bit Raw Detector Unpacking with Endianness Handling
-        try:
-            img = Image.open(io.BytesIO(raw_bytes))
-            if img.mode == "I;16B":
-                raw_matrix = (
-                    np.frombuffer(img.tobytes(), dtype=">u2")
-                    .reshape((img.height, img.width))
-                    .astype(np.float32)
-                )
-            elif img.mode == "I;16" or img.mode == "I;16L":
-                raw_matrix = (
-                    np.frombuffer(img.tobytes(), dtype="<u2")
-                    .reshape((img.height, img.width))
-                    .astype(np.float32)
-                )
-            else:
-                raw_matrix = np.array(img, dtype=np.float32)
-        except Exception:
-            w = int(meta.get("RawThermalImageWidth", 320))
-            h = int(meta.get("RawThermalImageHeight", 240))
-            raw_matrix = np.frombuffer(raw_bytes, dtype="<u2")
-            if raw_matrix.size == (w * h):
-                raw_matrix = raw_matrix.reshape((h, w)).astype(np.float32)
-            else:
-                raw_matrix = (
-                    np.frombuffer(raw_bytes[: w * h * 2], dtype=">u2")
-                    .reshape((h, w))
-                    .astype(np.float32)
-                )
-
-        if raw_matrix.ndim == 3:
-            raw_matrix = raw_matrix[:, :, 0]
-
-        # 4. Radiometric Radiance Transformations
-        S_refl = R1 / (R2 * (np.exp(B / T_refl) - F)) - O
-        S_atm = R1 / (R2 * (np.exp(B / T_atm) - F)) - O
-
-        S_obj = (
-            raw_matrix
-            - (1.0 - E) * tau_atm * S_refl
-            - (1.0 - tau_atm) * S_atm
-        ) / (E * tau_atm)
-
-        # 5. Invert Planck Radiative Equation
-        val = R1 / (R2 * (S_obj + O)) + F
-        val = np.maximum(val, 1.0001)
-
-        temp_kelvin = B / np.log(val)
-        temp_celsius = temp_kelvin - 273.15
-
-        temp_celsius = np.nan_to_num(
-            temp_celsius, nan=20.0, posinf=550.0, neginf=-40.0
-        )
-        temp_celsius = np.clip(temp_celsius, -40.0, 550.0)
 
         return np.round(temp_celsius, 2)
 
