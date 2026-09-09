@@ -438,11 +438,21 @@ function inspectFrame(idx) {
   if (roi.hasHotspot) {
     alertContainer.innerHTML = `
       <span class="text-slate-200 font-mono">
-        HOTSPOT: Peak ${roi.peakTemp.toFixed(1)} deg C at (${roi.peakCoord.x}, ${roi.peakCoord.y})
+        HOTSPOT: Peak ${roi.peakTemp.toFixed(1)} &deg;C at (${roi.peakCoord.x}, ${roi.peakCoord.y})
       </span>
+      ${roi.isContaminated ? `
+        <span class="text-amber-400 font-mono text-[10px] ml-2 px-1.5 py-0.5 bg-amber-950/60 border border-amber-800 rounded">
+          OUTLIER SKEW (MEDIAN FALLBACK ACTIVE)
+        </span>` : ''}
     `;
   } else {
-    alertContainer.innerHTML = `<span class="text-slate-600 font-mono">NO HOTSPOT DETECTED</span>`;
+    alertContainer.innerHTML = `
+      <span class="text-slate-600 font-mono">NO HOTSPOT DETECTED</span>
+      ${roi.isContaminated ? `
+        <span class="text-amber-400 font-mono text-[10px] ml-2 px-1.5 py-0.5 bg-amber-950/60 border border-amber-800 rounded">
+          OUTLIER SKEW DETECTED
+        </span>` : ''}
+    `;
   }
 
   // Differential Point Calculations
@@ -458,11 +468,11 @@ function inspectFrame(idx) {
   document.getElementById("lblP1Temp").innerText = `${tempP1.toFixed(2)} deg C`;
   document.getElementById("lblDeltaT").innerText = `${deltaT.toFixed(2)} deg C`;
 
-  document.getElementById("tblMinTemp").innerText = `${roi.minTemp.toFixed(2)} deg C`;
-  document.getElementById("tblMaxTemp").innerText = `${roi.peakTemp.toFixed(2)} deg C`;
-  document.getElementById("tblMeanTemp").innerText = `${roi.meanTemp.toFixed(2)} deg C`;
-  document.getElementById("tblStdDev").innerText = `${roi.stdDev.toFixed(2)} deg C`;
-  document.getElementById("tblDeltaTVal").innerText = `${deltaT.toFixed(2)} deg C`;
+  document.getElementById("tblMinTemp").innerText = `${roi.minTemp.toFixed(2)} °C`;
+  document.getElementById("tblMaxTemp").innerText = `${roi.peakTemp.toFixed(2)} °C`;
+  document.getElementById("tblMeanTemp").innerText = `${roi.meanTemp.toFixed(2)} °C (Med: ${roi.medianTemp.toFixed(2)} °C)`;
+  document.getElementById("tblStdDev").innerText = `${roi.stdDev.toFixed(2)} °C (MAD: ${roi.robustStd.toFixed(2)} °C)`;
+  document.getElementById("tblDeltaTVal").innerText = `${deltaT.toFixed(2)} °C`;
 
   // Isothermal Mask Processing
   const isIsoEnabled = document.getElementById("chkEnableIso")?.checked || false;
@@ -473,7 +483,7 @@ function inspectFrame(idx) {
   let heatmapTraces = [{
     z: matrix,
     type: 'heatmap',
-    colorscale: heatmapPalette, // Dynamic Heatmap Palette
+    colorscale: heatmapPalette,
     zmin: minBound,
     zmax: maxBound,
     hovertemplate: 'X: %{x}<br>Y: %{y}<br>Temp: %{z:.2f} deg C<extra></extra>'
@@ -499,14 +509,44 @@ function inspectFrame(idx) {
     document.getElementById("lblIsoAreaPct").innerText = `0.00 %`;
   }
 
-  const grad = computeGradient2D(matrix);
+  // --- SPATIAL GRADIENT / DEVIATION ENGINE (Laplacian vs Sobel) ---
+  const spatialMode = document.getElementById("cfgSpatialOpMode")?.value || "laplacian";
+  let grad = null;
+  let plotZmin = undefined;
+  let plotZmax = undefined;
+  let plotColorscale = gradientPalette;
+  let plotReversescale = gradientPalette === 'RdBu';
+  let hoverTemplate = '';
 
-  let gradMin = Infinity, gradMax = -Infinity;
-  grad.forEach(row => row.forEach(v => {
-    if (v < gradMin) gradMin = v;
-    if (v > gradMax) gradMax = v;
-  }));
-  const maxAbsVal = Math.max(Math.abs(gradMin), Math.abs(gradMax));
+  if (spatialMode === "sobel") {
+    grad = computeSobelGradient2D(matrix);
+    let maxMag = 0;
+    grad.forEach(row => row.forEach(v => {
+      if (v > maxMag) maxMag = v;
+    }));
+    plotZmin = 0.0;
+    plotZmax = maxMag;
+    plotColorscale = 'Viridis';
+    plotReversescale = false;
+    hoverTemplate = 'X: %{x}<br>Y: %{y}<br>|&nabla;T|: %{z:.3f} &deg;C/px<extra></extra>';
+
+    const titleEl = document.getElementById("lblSpatialPlotTitle");
+    if (titleEl) titleEl.innerText = "SOBEL GRADIENT MAGNITUDE (|∇T|)";
+  } else {
+    grad = computeLaplacianDeviation2D ? computeLaplacianDeviation2D(matrix) : computeGradient2D(matrix);
+    let gradMin = Infinity, gradMax = -Infinity;
+    grad.forEach(row => row.forEach(v => {
+      if (v < gradMin) gradMin = v;
+      if (v > gradMax) gradMax = v;
+    }));
+    const maxAbsVal = Math.max(Math.abs(gradMin), Math.abs(gradMax));
+    plotZmin = -maxAbsVal;
+    plotZmax = maxAbsVal;
+    hoverTemplate = 'X: %{x}<br>Y: %{y}<br>dT: %{z:.3f} &deg;C<extra></extra>';
+
+    const titleEl = document.getElementById("lblSpatialPlotTitle");
+    if (titleEl) titleEl.innerText = "SIGNED LAPLACIAN DEVIATION (dT °C)";
+  }
 
   let layoutShapes = [];
   if (roi.hasHotspot) {
@@ -538,15 +578,15 @@ function inspectFrame(idx) {
     shapes: layoutShapes
   });
 
-  // Render Spatial Gradient with Selected Palette
+  // Render Spatial Gradient/Deviation with Dynamic Scaling
   Plotly.newPlot('gradientPlot', [{
     z: grad,
     type: 'heatmap',
-    colorscale: gradientPalette, // Dynamic Gradient Palette
-    reversescale: gradientPalette === 'RdBu',
-    zmin: -maxAbsVal,
-    zmax: maxAbsVal,
-    hovertemplate: 'X: %{x}<br>Y: %{y}<br>dT: %{z:.3f} deg C<extra></extra>'
+    colorscale: plotColorscale,
+    reversescale: plotReversescale,
+    zmin: plotZmin,
+    zmax: plotZmax,
+    hovertemplate: hoverTemplate
   }], { 
     margin: { t: 5, b: 5, l: 25, r: 5 }, 
     paper_bgcolor: 'transparent', 
@@ -554,17 +594,46 @@ function inspectFrame(idx) {
     font: { color: '#94a3b8' } 
   });
 
-  // Render 3D Surface Topography
+// Render 3D Surface Topography (Linear vs Shifted-Logarithmic)
+  const surfaceScaleMode = document.getElementById("cfgSurfaceScale")?.value || "linear";
+  let surfaceZ = matrix;
+  let surfaceZTitle = 'Temp (°C)';
+  let surfaceZRange = [minBound, maxBound];
+  let surfaceCmin = minBound;
+  let surfaceCmax = maxBound;
+  let surfaceHoverTemplate = 'X: %{x}<br>Y: %{y}<br>Temp: %{text:.2f} °C<extra></extra>';
+
+  // Text matrix to ensure tooltip always displays original physical temperature in °C
+  const textMatrix = matrix.map(row => row.map(v => v.toFixed(2)));
+
+  if (surfaceScaleMode === "log") {
+    let frameMin = Infinity;
+    matrix.forEach(row => row.forEach(v => { if (v < frameMin) frameMin = v; }));
+    
+    // Z_log = ln(1 + T - T_min)
+    surfaceZ = matrix.map(row => row.map(v => Math.log1p(Math.max(0, v - frameMin))));
+    
+    let maxLog = 0;
+    surfaceZ.forEach(row => row.forEach(v => { if (v > maxLog) maxLog = v; }));
+    
+    surfaceZTitle = 'ln(1 + ΔT)';
+    surfaceZRange = [0, maxLog];
+    surfaceCmin = 0;
+    surfaceCmax = maxLog;
+    surfaceHoverTemplate = 'X: %{x}<br>Y: %{y}<br>Temp: %{text} °C<br>Log-Z: %{z:.2f}<extra></extra>';
+  }
+
   Plotly.newPlot('surface3DPlot', [{
-    z: matrix,
+    z: surfaceZ,
+    text: textMatrix,
     type: 'surface',
-    colorscale: heatmapPalette, // Dynamic 3D Surface Palette
-    cmin: minBound,
-    cmax: maxBound,
+    colorscale: heatmapPalette,
+    cmin: surfaceCmin,
+    cmax: surfaceCmax,
     contours: {
       z: { show: true, usecolormap: true, highlightcolor: "#e2e8f0", project: { z: true } }
     },
-    hovertemplate: 'X: %{x}<br>Y: %{y}<br>Temp: %{z:.2f} deg C<extra></extra>'
+    hovertemplate: surfaceHoverTemplate
   }], {
     margin: { t: 10, b: 10, l: 10, r: 10 },
     paper_bgcolor: 'transparent',
@@ -573,7 +642,7 @@ function inspectFrame(idx) {
     scene: {
       xaxis: { title: 'X', color: '#64748b', gridcolor: '#1e293b' },
       yaxis: { title: 'Y', color: '#64748b', gridcolor: '#1e293b' },
-      zaxis: { title: 'Temp (deg C)', color: '#64748b', gridcolor: '#1e293b', range: [minBound, maxBound] },
+      zaxis: { title: surfaceZTitle, color: '#64748b', gridcolor: '#1e293b', range: surfaceZRange },
       aspectratio: { x: 1, y: 1, z: 0.4 }
     }
   });
@@ -584,6 +653,7 @@ function inspectFrame(idx) {
     document.getElementById("hoverCoords").innerText = `(${pt.x}, ${pt.y})`;
     document.getElementById("hoverTemp").innerText = `${pt.z.toFixed(2)} deg C`;
   });
+
   // Compute Offset / Difference Matrix (T_corrected - T_raw)
   const isAstm = document.getElementById("chkEnableAstm")?.checked || false;
   let offsetMatrix = Array.from({ length: matrix.length }, () => new Array(matrix[0].length).fill(0));
@@ -619,8 +689,8 @@ function inspectFrame(idx) {
       font: { color: '#94a3b8' }
     });
   }
+
   updateLineProfile();
-  // Trigger Heat Flux calculation for inspected frame
   replotHeatFlux();
 }
 

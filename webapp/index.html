@@ -207,7 +207,19 @@
             <div id="thermalPlot" class="w-full h-80"></div>
           </div>
           <div class="bg-slate-950 p-3 rounded border border-slate-800">
-            <h4 class="text-xs font-bold font-mono text-slate-400 mb-2">SPATIAL THERMAL GRADIENT (dT &deg;C)</h4>
+            <div class="flex justify-between items-center mb-2">
+              <h4 id="lblSpatialPlotTitle" class="text-xs font-bold font-mono text-slate-400">
+                SPATIAL GRADIENT / DEVIATION
+              </h4>
+              <div class="flex items-center gap-1">
+                <label for="cfgSpatialOpMode" class="text-[10px] text-slate-500 font-mono">Method:</label>
+                <select id="cfgSpatialOpMode" onchange="replotActiveCanvas()" 
+                        class="bg-slate-900 border border-slate-700 text-slate-200 text-[11px] font-mono rounded px-2 py-0.5 focus:outline-none">
+                  <option value="laplacian" selected>Laplacian Deviation (dT &deg;C)</option>
+                  <option value="sobel">Sobel Gradient Magnitude (|&nabla;T|)</option>
+                </select>
+              </div>
+            </div>
             <div id="gradientPlot" class="w-full h-80"></div>
           </div>
         </div>
@@ -335,6 +347,17 @@
           <span class="text-[11px] text-slate-500 font-mono">Interactive Orbit / Zoom</span>
         </summary>
         <div class="p-4">
+          <div class="flex justify-between items-center mb-3">
+            <span class="text-[10px] font-mono text-slate-400 uppercase tracking-wider">Elevation & Colormap Projection</span>
+            <div class="flex items-center gap-2" onclick="event.stopPropagation();">
+              <label for="cfgSurfaceScale" class="text-[10px] text-slate-400 font-mono">Scale:</label>
+              <select id="cfgSurfaceScale" onchange="inspectFrame(activeInspectedIdx)" 
+                      class="bg-slate-950 border border-slate-700 text-slate-200 text-[11px] font-mono rounded px-2 py-1 focus:outline-none focus:border-cyan-500">
+                <option value="linear" selected>Linear (°C)</option>
+                <option value="log">Logarithmic [ln(1 + ΔT)]</option>
+              </select>
+            </div>
+          </div>
           <div id="surface3DPlot" class="w-full h-96"></div>
         </div>
       </details>

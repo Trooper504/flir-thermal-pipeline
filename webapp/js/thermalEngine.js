@@ -103,39 +103,116 @@ function computeGradient2D(matrix) {// this is for computing the 2D gradient of 
   }
   return grad;
 }
+// --- SIGNED SPATIAL THERMAL DEVIATION (Discrete Laplacian: Center - Neighbor Avg) ---
+function computeLaplacianDeviation2D(matrix) {
+  const rows = matrix.length;
+  const cols = matrix[0].length;
+  let dev = Array.from({ length: rows }, () => new Array(cols).fill(0));
+
+  for (let r = 1; r < rows - 1; r++) {
+    for (let c = 1; c < cols - 1; c++) {
+      let sum = 0;
+      for (let dr = -1; dr <= 1; dr++) {
+        for (let dc = -1; dc <= 1; dc++) {
+          if (dr === 0 && dc === 0) continue;
+          sum += matrix[r + dr][c + dc];
+        }
+      }
+      const neighborAvg = sum / 8.0;
+      dev[r][c] = matrix[r][c] - neighborAvg;
+    }
+  }
+  return dev;
+}
+
+// Backward compatibility alias
+
+
+// --- FIRST-ORDER 2D SOBEL GRADIENT MAGNITUDE (|∇T| = sqrt(Gx^2 + Gy^2)) ---
+function computeSobelGradient2D(matrix) {
+  const rows = matrix.length;
+  const cols = matrix[0].length;
+  let gradMag = Array.from({ length: rows }, () => new Array(cols).fill(0));
+
+  for (let r = 1; r < rows - 1; r++) {
+    for (let c = 1; c < cols - 1; c++) {
+      // Horizontal gradient kernel Gx (normalized by 1/8)
+      const gx = (
+        -1 * matrix[r - 1][c - 1] + 1 * matrix[r - 1][c + 1] +
+        -2 * matrix[r][c - 1]     + 2 * matrix[r][c + 1] +
+        -1 * matrix[r + 1][c - 1] + 1 * matrix[r + 1][c + 1]
+      ) / 8.0;
+
+      // Vertical gradient kernel Gy (normalized by 1/8)
+      const gy = (
+        -1 * matrix[r - 1][c - 1] - 2 * matrix[r - 1][c] - 1 * matrix[r - 1][c + 1] +
+         1 * matrix[r + 1][c - 1] + 2 * matrix[r + 1][c] + 1 * matrix[r + 1][c + 1]
+      ) / 8.0;
+
+      gradMag[r][c] = Math.sqrt(gx * gx + gy * gy);
+    }
+  }
+  return gradMag;
+}
 
 // --- HOTSPOT ROI ENGINE ---
+// --- ROBUST DUAL-ESTIMATOR HOTSPOT ENGINE (Mean/Std vs Median/MAD) ---
 function detectHotspotROI(matrix, sensitivityMultiplier = 2.0) {
-  let sum = 0, count = 0;
+  const rows = matrix.length;
+  const cols = matrix[0].length;
+  const K = rows * cols;
+
+  let flat = [];
   let minVal = Infinity, maxVal = -Infinity;
   let maxR = 0, maxC = 0;
+  let sum = 0;
 
-  for (let r = 0; r < matrix.length; r++) {
-    for (let c = 0; c < matrix[r].length; c++) {
+  for (let r = 0; r < rows; r++) {
+    for (let c = 0; c < cols; c++) {
       const v = matrix[r][c];
+      flat.push(v);
       sum += v;
-      count++;
       if (v < minVal) minVal = v;
       if (v > maxVal) { maxVal = v; maxR = r; maxC = c; }
     }
   }
-  const mean = sum / count;
 
+  // 1. Parametric Moments (Mean & Standard Deviation)
+  const mean = sum / K;
   let varianceSum = 0;
-  for (let r = 0; r < matrix.length; r++) {
-    for (let c = 0; c < matrix[r].length; c++) {
-      varianceSum += Math.pow(matrix[r][c] - mean, 2);
-    }
+  for (let i = 0; i < K; i++) {
+    varianceSum += Math.pow(flat[i] - mean, 2);
   }
-  const stdDev = Math.sqrt(varianceSum / count);
-  const hotspotThreshold = mean + (sensitivityMultiplier * stdDev);
+  const stdDev = Math.sqrt(varianceSum / K);
 
-  let minR = matrix.length, maxRow = 0;
-  let minC = matrix[0].length, maxCol = 0;
+  // 2. Robust Order Statistics (Median & Scaled MAD)
+  flat.sort((a, b) => a - b);
+  const median = K % 2 === 0 ? (flat[K / 2 - 1] + flat[K / 2]) / 2.0 : flat[Math.floor(K / 2)];
+
+  let diffs = [];
+  for (let i = 0; i < K; i++) {
+    diffs.push(Math.abs(flat[i] - median));
+  }
+  diffs.sort((a, b) => a - b);
+  const mad = K % 2 === 0 ? (diffs[K / 2 - 1] + diffs[K / 2]) / 2.0 : diffs[Math.floor(K / 2)];
+  const robustStd = 1.4826 * mad;
+
+  // 3. Fallback Trigger Logic: Detect outlier contamination
+  const meanMedianDelta = Math.abs(mean - median);
+  const vir = stdDev / (robustStd + 1e-5); // Variance Inflation Ratio
+  const isContaminated = (meanMedianDelta > 0.5) || (vir > 1.5);
+
+  const baseline = isContaminated ? median : mean;
+  const dispersion = isContaminated ? robustStd : stdDev;
+  const hotspotThreshold = baseline + (sensitivityMultiplier * dispersion);
+
+  // 4. Bounding Box Isolation
+  let minR = rows, maxRow = 0;
+  let minC = cols, maxCol = 0;
   let hotspotPixelCount = 0;
 
-  for (let r = 0; r < matrix.length; r++) {
-    for (let c = 0; c < matrix[r].length; c++) {
+  for (let r = 0; r < rows; r++) {
+    for (let c = 0; c < cols; c++) {
       if (matrix[r][c] >= hotspotThreshold) {
         hotspotPixelCount++;
         if (r < minR) minR = r;
@@ -152,9 +229,17 @@ function detectHotspotROI(matrix, sensitivityMultiplier = 2.0) {
     threshold: hotspotThreshold,
     peakTemp: maxVal,
     peakCoord: { x: maxC, y: maxR },
-    meanTemp: mean,
     minTemp: minVal,
+    meanTemp: mean,
+    medianTemp: median,
     stdDev: stdDev,
+    robustStd: robustStd,
+    meanMedianDelta: meanMedianDelta,
+    vir: vir,
+    isContaminated: isContaminated,
+    activeBaseline: baseline,
+    activeDispersion: dispersion,
+    method: isContaminated ? "Robust (Median + MAD)" : "Parametric (Mean + StdDev)",
     bbox: hasHotspot ? { x0: minC, y0: minR, x1: maxCol, y1: maxRow } : null
   };
 }
