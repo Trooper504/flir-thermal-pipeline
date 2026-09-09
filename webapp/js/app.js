@@ -271,19 +271,25 @@ function getApiEndpoint() {
 
 function startImportStream() {
   if (isImporting) return;
+  const sourceMode = document.getElementById("cfgDataSource").value;
+
   isImporting = true;
   document.getElementById("btnImport").disabled = true;
   document.getElementById("btnImport").classList.add("opacity-50", "cursor-not-allowed");
-  
+
   const stopBtn = document.getElementById("btnStop");
   stopBtn.disabled = false;
   stopBtn.classList.remove("opacity-50", "cursor-not-allowed", "text-slate-600");
   stopBtn.classList.add("text-slate-200", "hover:bg-slate-900");
 
-  const sourceMode = document.getElementById("cfgDataSource").value;
-  document.getElementById("statusBadge").innerText = `INGESTING (${sourceMode.toUpperCase()})`;
-
-  importIntervalId = setInterval(ingestFrame, 1000);
+  if (sourceMode === "pi") {
+    // One-shot extraction for the full DCIM camera album
+    ingestPiAlbum();
+  } else {
+    // Simulated stream continues interval polling
+    document.getElementById("statusBadge").innerText = `INGESTING (${sourceMode.toUpperCase()})`;
+    importIntervalId = setInterval(ingestFrame, 1000);
+  }
 }
 
 function stopImportStream() {
@@ -353,6 +359,66 @@ async function ingestFrame() {
 
   if (activeInspectedIdx === null) {
     inspectFrame(frameData.id);
+  }
+}
+let ingestedFilenamesSet = new Set();
+
+async function ingestPiAlbum() {
+  // Points directly to /api/v1/thermal-album
+  const baseApi = getApiEndpoint().replace(/\/api\/.*$/, '');
+  const albumUrl = `${baseApi}/api/v1/thermal-album`;
+
+  document.getElementById("statusBadge").innerText = "EXTRACTING PI ALBUM...";
+
+  try {
+    const res = await fetch(albumUrl);
+    if (!res.ok) throw new Error(`HTTP ${res.status}: Failed to fetch album`);
+
+    const payload = await res.json();
+    const frames = payload.frames || [];
+
+    if (frames.length === 0) {
+      document.getElementById("statusBadge").innerText = "PI ALBUM EMPTY";
+      stopImportStream();
+      return;
+    }
+
+    let newlyAdded = 0;
+
+    for (const frame of frames) {
+      const fname = frame.name || `FLIR_${new Date(frame.mtime * 1000).toISOString()}`;
+      
+      // Skip frames already present in the buffer to avoid duplicates
+      if (ingestedFilenamesSet.has(fname)) continue;
+
+      const frameData = {
+        id: frameBuffer.length,
+        timestamp: fname,
+        rawMatrix: frame.data,
+        calibratedMatrix: frame.data, // Pre-calibrated Planck matrix from Python
+        width: frame.width,
+        height: frame.height
+      };
+
+      frameBuffer.push(frameData);
+      ingestedFilenamesSet.add(fname);
+      saveFrameToDatabase(frameData);
+      appendThumbnailToGallery(frameData);
+      newlyAdded++;
+    }
+
+    document.getElementById("lblFrameCount").innerText = frameBuffer.length;
+    document.getElementById("statusBadge").innerText = `PI ALBUM LOADED (${newlyAdded} NEW)`;
+
+    if (newlyAdded > 0 && activeInspectedIdx === null) {
+      inspectFrame(frameBuffer.length - newlyAdded);
+    }
+  } catch (err) {
+    console.error("Album fetch error:", err);
+    document.getElementById("statusBadge").innerText = "PI CONNECTION ERROR";
+  } finally {
+    // Album extraction is a complete one-shot batch, so stop the stream state immediately
+    stopImportStream();
   }
 }
 

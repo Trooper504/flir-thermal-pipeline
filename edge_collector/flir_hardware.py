@@ -140,6 +140,8 @@ class RealFlirCamera:
     def __init__(
         self,
         camera_mount_path="/media/raspberrypi_local/07F5-01A9/DCIM/100_FLIR",
+        # In flir_hardware.py or main.py
+        #camera_mount_path = "./",
     ):
         self.mount_path = camera_mount_path
         self.extractor = FlirExtractorNative()
