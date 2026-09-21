@@ -29,6 +29,8 @@ flir-thermal-pipeline/
 ## Web Client Features (`webapp/`)
 
 * **Strict FLIR CSV Parser:** Parses Russian semicolon/comma CSV exports (`34,192` → `34.192`) cleanly without false artifacts.
+* **Full-Album & Incremental Ingestion:** `START STREAM` pulls the entire camera album, while `INGEST LAST N` extracts only the newest *N* captures (`?limit=N`) so a session can be resumed by importing just the shots taken since the last import. Captures already stored are skipped by filename.
+* **Click-to-Pick Differential Points:** `Pick P1` / `Pick P2` arm the 2D thermogram; a click writes the pixel coordinates straight into the `pt1X/pt1Y/pt2X/pt2Y` inputs (auto-advancing P1 → P2 → P1 for two-click pairing), draws cyan/amber markers plus a P1 → P2 guide line through `Plotly.relayout`, and stays synchronized with manual typing (which clamps to the frame bounds).
 * **Signed 3x3 Spatial Thermal Gradient:** Calculates local pixel temperature deviation ($T_{\text{center}} - \bar{T}_{\text{neighbors}}$) with symmetric dynamic scaling centered at $0.0\text{ °C}$.
 * **3D Thermal Topography Surface:** Renders radiometric matrices as interactive 3D surface plots with projected isothermal contour lines.
 * **Differential Point Inspection:** Real-time point-to-point temperature delta calculation ($\Delta T_{1-2} = |T(P_1) - T(P_2)|$).
@@ -98,6 +100,35 @@ The client components expect a JSON endpoint returning:
   ]
 }
 ```
+
+### Album endpoint
+
+`GET /api/v1/thermal-album` returns every capture on the camera, oldest first:
+
+```json
+{
+  "status": "success",
+  "total_frames": 2,
+  "requested_limit": 0,
+  "frames": [
+    { "name": "FLIR0001.jpg", "mtime": 1770000000.0, "width": 320, "height": 240, "data": [[32.1]] }
+  ]
+}
+```
+
+Pass `?limit=N` to return only the `N` most recent captures (used by the **INGEST LAST N** button).
+`limit` defaults to `0`, meaning the complete album; negative values are rejected with HTTP 400.
+ExifTool is only invoked for the selected files, so a large `N` is far cheaper than a full scan.
+
+### Live frame endpoint
+
+`GET /api/v1/thermal-frame` returns the newest **usable** capture. Non-radiometric or corrupted
+files (e.g. a visual screenshot copied into the DCIM folder) are skipped with a warning, scanning
+backwards through up to `LIVE_FRAME_LOOKBACK` (3) candidates, so one stray file cannot stall
+polling. Already-probed candidates are cached against their mtime + size, so a 1 Hz poll performs
+no ExifTool work while the mount is unchanged. Repeating the `mtime` the client already holds
+returns HTTP 204, and the compared timestamp is the one the client received, so the same frame is
+never re-delivered in a loop.
 
 ---
 

@@ -4,6 +4,8 @@ let selectedIndices = new Set();
 let activeInspectedIdx = null;
 let isImporting = false;
 let importIntervalId = null;
+// Registry of capture filenames already stored, used to make camera ingestion incremental
+let ingestedFilenamesSet = new Set();
 
 // --- INDEXEDDB STORAGE ENGINE ---
 function initDatabase() {
@@ -39,6 +41,9 @@ function loadFramesFromDatabase() {
         return f;
       });
 
+      // Rebuild the ingestion registry so a page reload never re-imports stored captures
+      ingestedFilenamesSet = new Set(frameBuffer.map(f => f.timestamp));
+
       document.getElementById("lblFrameCount").innerText = frameBuffer.length;
       document.getElementById("galleryGrid").innerHTML = "";
       frameBuffer.forEach(f => appendThumbnailToGallery(f));
@@ -54,6 +59,7 @@ function clearDbAndGallery() {
     }
     frameBuffer = [];
     selectedIndices.clear();
+    ingestedFilenamesSet.clear();
     activeInspectedIdx = null;
     document.getElementById("galleryGrid").innerHTML = "";
     document.getElementById("lblFrameCount").innerText = "0";
@@ -257,6 +263,19 @@ function replotActiveCanvas() {
 // --- STREAM & INGESTION CONTROLLER ---
 let lastCapturedMtime = 0;
 
+// Buttons that kick off an ingestion batch and must be locked while one is running
+const INGEST_TRIGGER_BUTTON_IDS = ["btnImport", "btnImportLastN"];
+
+function setIngestTriggerState(disabled) {
+  INGEST_TRIGGER_BUTTON_IDS.forEach(id => {
+    const btn = document.getElementById(id);
+    if (!btn) return;
+    btn.disabled = disabled;
+    btn.classList.toggle("opacity-50", disabled);
+    btn.classList.toggle("cursor-not-allowed", disabled);
+  });
+}
+
 function getApiEndpoint() {
   const inputEl = document.getElementById("cfgApiUrl");
   let url = inputEl ? inputEl.value.trim() : "";
@@ -269,13 +288,19 @@ function getApiEndpoint() {
   return url;
 }
 
-function startImportStream() {
+/**
+ * Starts an ingestion batch.
+ * @param {number} [limit] Number of most recent camera captures to pull.
+ *   0 / omitted ingests the complete album (and is also used for the
+ *   polling simulation stream).
+ */
+function startImportStream(limit = 0) {
   if (isImporting) return;
   const sourceMode = document.getElementById("cfgDataSource").value;
+  const requested = Math.max(0, parseInt(limit, 10) || 0);
 
   isImporting = true;
-  document.getElementById("btnImport").disabled = true;
-  document.getElementById("btnImport").classList.add("opacity-50", "cursor-not-allowed");
+  setIngestTriggerState(true);
 
   const stopBtn = document.getElementById("btnStop");
   stopBtn.disabled = false;
@@ -283,8 +308,8 @@ function startImportStream() {
   stopBtn.classList.add("text-slate-200", "hover:bg-slate-900");
 
   if (sourceMode === "pi") {
-    // One-shot extraction for the full DCIM camera album
-    ingestPiAlbum();
+    // One-shot extraction for the DCIM camera album (all shots, or only the newest N)
+    ingestPiAlbum(requested);
   } else {
     // Simulated stream continues interval polling
     document.getElementById("statusBadge").innerText = `INGESTING (${sourceMode.toUpperCase()})`;
@@ -292,19 +317,46 @@ function startImportStream() {
   }
 }
 
-function stopImportStream() {
+/**
+ * UI handler: ingest only the newest N captures from the camera album.
+ */
+function ingestLastN() {
+  const sourceMode = document.getElementById("cfgDataSource").value;
+  if (sourceMode !== "pi") {
+    alert("'Ingest Last N' reads the camera album. Set Data Source to 'Live Pi API' first.");
+    return;
+  }
+
+  const input = document.getElementById("cfgIngestCount");
+  const limit = Math.max(1, Math.min(999, parseInt(input ? input.value : "", 10) || 0));
+  if (!limit) {
+    alert("Enter how many of the most recent shots to ingest (1 - 999).");
+    return;
+  }
+  input.value = limit;
+
+  startImportStream(limit);
+}
+
+/**
+ * Stops the active ingestion batch.
+ * @param {boolean} [preserveStatus] When true the status badge keeps the
+ *   message written by the batch (e.g. "PI ALBUM LOADED (4 NEW)").
+ */
+function stopImportStream(preserveStatus = false) {
   isImporting = false;
   if (importIntervalId) clearInterval(importIntervalId);
   importIntervalId = null;
 
-  document.getElementById("btnImport").disabled = false;
-  document.getElementById("btnImport").classList.remove("opacity-50", "cursor-not-allowed");
+  setIngestTriggerState(false);
 
   const stopBtn = document.getElementById("btnStop");
   stopBtn.disabled = true;
   stopBtn.classList.add("opacity-50", "cursor-not-allowed", "text-slate-600");
 
-  document.getElementById("statusBadge").innerText = "SYSTEM IDLE";
+  if (!preserveStatus) {
+    document.getElementById("statusBadge").innerText = "SYSTEM IDLE";
+  }
 }
 
 async function ingestFrame() {
@@ -352,6 +404,7 @@ async function ingestFrame() {
   };
 
   frameBuffer.push(frameData);
+  ingestedFilenamesSet.add(frameData.timestamp);
   saveFrameToDatabase(frameData);
 
   document.getElementById("lblFrameCount").innerText = frameBuffer.length;
@@ -361,14 +414,22 @@ async function ingestFrame() {
     inspectFrame(frameData.id);
   }
 }
-let ingestedFilenamesSet = new Set();
 
-async function ingestPiAlbum() {
+/**
+ * Fetches a batch of camera captures in a single request.
+ * @param {number} [limit] 0 / omitted pulls the complete album, otherwise only
+ *   the `limit` most recent captures are extracted by the edge collector.
+ */
+async function ingestPiAlbum(limit = 0) {
   // Points directly to /api/v1/thermal-album
   const baseApi = getApiEndpoint().replace(/\/api\/.*$/, '');
-  const albumUrl = `${baseApi}/api/v1/thermal-album`;
+  const albumUrl = limit > 0
+    ? `${baseApi}/api/v1/thermal-album?limit=${limit}`
+    : `${baseApi}/api/v1/thermal-album`;
 
-  document.getElementById("statusBadge").innerText = "EXTRACTING PI ALBUM...";
+  document.getElementById("statusBadge").innerText = limit > 0
+    ? `EXTRACTING LAST ${limit} PI FRAMES...`
+    : "EXTRACTING PI ALBUM...";
 
   try {
     const res = await fetch(albumUrl);
@@ -378,8 +439,10 @@ async function ingestPiAlbum() {
     const frames = payload.frames || [];
 
     if (frames.length === 0) {
-      document.getElementById("statusBadge").innerText = "PI ALBUM EMPTY";
-      stopImportStream();
+      document.getElementById("statusBadge").innerText = limit > 0
+        ? `NO PI FRAMES FOUND FOR LAST ${limit}`
+        : "PI ALBUM EMPTY";
+      stopImportStream(true);
       return;
     }
 
@@ -408,7 +471,13 @@ async function ingestPiAlbum() {
     }
 
     document.getElementById("lblFrameCount").innerText = frameBuffer.length;
-    document.getElementById("statusBadge").innerText = `PI ALBUM LOADED (${newlyAdded} NEW)`;
+
+    // Surface how many of the requested most-recent shots were already stored,
+    // so the operator knows whether a larger "last N" window is needed.
+    const skipped = frames.length - newlyAdded;
+    document.getElementById("statusBadge").innerText = limit > 0
+      ? `PI LAST ${limit}: ${newlyAdded} NEW${skipped > 0 ? ` (${skipped} ALREADY STORED)` : ""}`
+      : `PI ALBUM LOADED (${newlyAdded} NEW)`;
 
     if (newlyAdded > 0 && activeInspectedIdx === null) {
       inspectFrame(frameBuffer.length - newlyAdded);
@@ -418,7 +487,8 @@ async function ingestPiAlbum() {
     document.getElementById("statusBadge").innerText = "PI CONNECTION ERROR";
   } finally {
     // Album extraction is a complete one-shot batch, so stop the stream state immediately
-    stopImportStream();
+    // (status badge preserved so the batch outcome stays visible)
+    stopImportStream(true);
   }
 }
 
@@ -479,6 +549,198 @@ function updateBatchUI() {
 }
 
 // --- INSPECTION DASHBOARD ---
+// --- INTERACTIVE POINT PICKING (2D thermogram click -> P1 / P2) ---
+const POINT_OVERLAY_TAG = "pt-overlay";
+const P1_COLOR = "#06b6d4"; // cyan  -> matches the "Pick P1" control
+const P2_COLOR = "#f59e0b"; // amber -> matches the "Pick P2" control
+
+// Which point the next thermogram click writes. Auto-advances P1 -> P2 -> P1 so two
+// successive clicks define the differential / cross-section pair.
+let activePickTarget = "P1";
+
+function clampIndex(value, size) {
+  const v = Math.round(Number(value));
+  if (!isFinite(v) || size <= 0) return 0;
+  return Math.max(0, Math.min(size - 1, v));
+}
+
+/** Current P1/P2 selection, clamped to the active frame's matrix bounds. */
+function readPointSelection(matrix = null) {
+  const m = matrix || (activeInspectedIdx !== null && frameBuffer[activeInspectedIdx]
+    ? frameBuffer[activeInspectedIdx].calibratedMatrix
+    : null);
+  const width = m ? m[0].length : 1;
+  const height = m ? m.length : 1;
+
+  return {
+    p1: {
+      x: clampIndex(document.getElementById("pt1X")?.value, width),
+      y: clampIndex(document.getElementById("pt1Y")?.value, height)
+    },
+    p2: {
+      x: clampIndex(document.getElementById("pt2X")?.value, width),
+      y: clampIndex(document.getElementById("pt2Y")?.value, height)
+    }
+  };
+}
+
+/** Marker circles + P1 -> P2 guide line. Shared by the render path and the picker. */
+function buildPointOverlayShapes(p1, p2) {
+  const circle = (pt, color) => ({
+    type: "circle",
+    x0: pt.x - 1, y0: pt.y - 1, x1: pt.x + 1, y1: pt.y + 1,
+    fillcolor: color, line: { color: "#ffffff", width: 1 },
+    name: POINT_OVERLAY_TAG
+  });
+
+  return [
+    {
+      type: "line",
+      x0: p1.x, y0: p1.y, x1: p2.x, y1: p2.y,
+      line: { color: "rgba(255, 255, 255, 0.75)", width: 1.5, dash: "dot" },
+      name: POINT_OVERLAY_TAG
+    },
+    circle(p1, P1_COLOR),
+    circle(p2, P2_COLOR)
+  ];
+}
+
+/** P1 / P2 text labels drawn on the thermogram. */
+function buildPointOverlayAnnotations(p1, p2) {
+  const label = (pt, text, color) => ({
+    x: pt.x, y: pt.y, text: text, showarrow: true, arrowhead: 2,
+    arrowcolor: color, ax: 0, ay: -18,
+    font: { color: color, size: 11, family: "monospace" },
+    bgcolor: "rgba(15, 23, 42, 0.85)",
+    bordercolor: color, borderwidth: 1,
+    name: POINT_OVERLAY_TAG
+  });
+
+  return [label(p1, "P1", P1_COLOR), label(p2, "P2", P2_COLOR)];
+}
+
+function setPointPickMode(target) {
+  activePickTarget = target === "P2" ? "P2" : "P1";
+  updatePickUIFeedback();
+}
+
+function updatePickUIFeedback() {
+  const btnP1 = document.getElementById("btnPickP1");
+  const btnP2 = document.getElementById("btnPickP2");
+  const statusLbl = document.getElementById("lblPickStatus");
+  if (!btnP1 || !btnP2) return;
+
+  const armed = activeInspectedIdx !== null && !!frameBuffer[activeInspectedIdx];
+  const p1Active = armed && activePickTarget === "P1";
+  const p2Active = armed && activePickTarget === "P2";
+
+  btnP1.classList.toggle("bg-cyan-500", p1Active);
+  btnP1.classList.toggle("text-slate-950", p1Active);
+  btnP1.classList.toggle("font-bold", p1Active);
+  btnP2.classList.toggle("bg-amber-500", p2Active);
+  btnP2.classList.toggle("text-slate-950", p2Active);
+  btnP2.classList.toggle("font-bold", p2Active);
+
+  if (statusLbl) {
+    if (!armed) {
+      statusLbl.innerText = "Idle - inspect a frame to enable picking";
+    } else if (p1Active) {
+      statusLbl.innerText = "Click the 2D map to set P1 (cyan)";
+    } else {
+      statusLbl.innerText = "Click the 2D map to set P2 (amber)";
+    }
+  }
+}
+
+/** Binds plotly_click on the 2D thermogram (safe to call after every render). */
+function setupPlotlyPointPicker(plotDivId = "thermalPlot") {
+  const plotDiv = document.getElementById(plotDivId);
+  if (!plotDiv || typeof plotDiv.on !== "function") return; // Plotly not attached yet
+
+  // Unbind any prior listener so repeated renders cannot stack duplicate handlers
+  if (typeof plotDiv.removeAllListeners === "function") {
+    plotDiv.removeAllListeners("plotly_click");
+  }
+  plotDiv.on("plotly_click", handleThermogramPointClick);
+}
+
+function handleThermogramPointClick(data) {
+  if (!data || !data.points || data.points.length === 0) return;
+  if (activeInspectedIdx === null || !frameBuffer[activeInspectedIdx]) return;
+
+  const pt = data.points[0];
+  if (pt.x === undefined || pt.y === undefined) return;
+
+  const matrix = frameBuffer[activeInspectedIdx].calibratedMatrix;
+  const px = clampIndex(pt.x, matrix[0].length);
+  const py = clampIndex(pt.y, matrix.length);
+  const target = activePickTarget;
+  const prefix = target === "P1" ? "pt1" : "pt2";
+
+  document.getElementById(`${prefix}X`).value = px;
+  document.getElementById(`${prefix}Y`).value = py;
+
+  const tempText = typeof pt.z === "number" ? ` = ${pt.z.toFixed(2)} °C` : "";
+  console.log(`[Picker] ${target} set to (${px}, ${py})${tempText}`);
+
+  // Auto-advance so a second click completes the P1 -> P2 pair
+  activePickTarget = target === "P1" ? "P2" : "P1";
+
+  updatePickUIFeedback();
+  annotatePointsOnHeatmap("thermalPlot");
+  updateDifferentialPointReadouts();
+}
+
+/** Redraws only the P1/P2 overlay, leaving the rendered heatmap untouched. */
+function annotatePointsOnHeatmap(divId = "thermalPlot", p1 = null, p2 = null) {
+  const plotDiv = document.getElementById(divId);
+  if (!plotDiv || typeof plotDiv.layout !== "object" || typeof Plotly === "undefined") return;
+
+  const selection = readPointSelection();
+  const point1 = p1 || selection.p1;
+  const point2 = p2 || selection.p2;
+
+  // Keep other decorations (hotspot ROI box, ...) and replace only our own overlay
+  const baseShapes = (plotDiv.layout.shapes || []).filter(s => s?.name !== POINT_OVERLAY_TAG);
+  const baseAnnotations = (plotDiv.layout.annotations || []).filter(a => a?.name !== POINT_OVERLAY_TAG);
+
+  Plotly.relayout(divId, {
+    shapes: baseShapes.concat(buildPointOverlayShapes(point1, point2)),
+    annotations: baseAnnotations.concat(buildPointOverlayAnnotations(point1, point2))
+  });
+}
+
+/** Lightweight refresh of the P1/P2 readouts (the click path must stay non-disruptive). */
+function updateDifferentialPointReadouts() {
+  if (activeInspectedIdx === null || !frameBuffer[activeInspectedIdx]) return;
+
+  const matrix = frameBuffer[activeInspectedIdx].calibratedMatrix;
+  const { p1, p2 } = readPointSelection(matrix);
+  const tempP1 = matrix[p1.y][p1.x];
+  const tempP2 = matrix[p2.y][p2.x];
+
+  const lblP1 = document.getElementById("lblP1Temp");
+  const lblDeltaT = document.getElementById("lblDeltaT");
+  if (lblP1) lblP1.innerText = `${tempP1.toFixed(2)} deg C`;
+  if (lblDeltaT) lblDeltaT.innerText = `${Math.abs(tempP1 - tempP2).toFixed(2)} deg C`;
+}
+
+/** Manual coordinate entry: clamp the typed values, then re-render the active canvas. */
+function syncManualPointInput() {
+  if (activeInspectedIdx === null || !frameBuffer[activeInspectedIdx]) return;
+
+  const matrix = frameBuffer[activeInspectedIdx].calibratedMatrix;
+  const { p1, p2 } = readPointSelection(matrix);
+
+  document.getElementById("pt1X").value = p1.x;
+  document.getElementById("pt1Y").value = p1.y;
+  document.getElementById("pt2X").value = p2.x;
+  document.getElementById("pt2Y").value = p2.y;
+
+  updatePickUIFeedback();
+  replotActiveCanvas();
+}
+
 // --- INSPECT FRAME WITH ISOTHERMAL MASK OVERLAY ---
 // --- INSPECT FRAME WITH DYNAMIC PALETTE SELECTION ---
 function inspectFrame(idx) {
@@ -624,16 +886,10 @@ function inspectFrame(idx) {
     });
   }
 
-  layoutShapes.push({
-    type: 'circle',
-    x0: p1x - 1, y0: p1y - 1, x1: p1x + 1, y1: p1y + 1,
-    fillcolor: '#38bdf8', line: { color: '#ffffff', width: 1 }
-  });
-  layoutShapes.push({
-    type: 'circle',
-    x0: p2x - 1, y0: p2y - 1, x1: p2x + 1, y1: p2y + 1,
-    fillcolor: '#f43f5e', line: { color: '#ffffff', width: 1 }
-  });
+  // P1 / P2 markers + guide line (shared builder so clicks and renders agree)
+  const point1 = { x: p1x, y: p1y };
+  const point2 = { x: p2x, y: p2y };
+  layoutShapes.push(...buildPointOverlayShapes(point1, point2));
 
   // Render Radiometric Heatmap
   Plotly.newPlot('thermalPlot', heatmapTraces, { 
@@ -641,8 +897,13 @@ function inspectFrame(idx) {
     paper_bgcolor: 'transparent', 
     plot_bgcolor: 'transparent', 
     font: { color: '#94a3b8' },
-    shapes: layoutShapes
+    shapes: layoutShapes,
+    annotations: buildPointOverlayAnnotations(point1, point2)
   });
+
+  // Arm click-to-pick on the freshly rendered thermogram and sync the picker controls
+  setupPlotlyPointPicker('thermalPlot');
+  updatePickUIFeedback();
 
   // Render Spatial Gradient/Deviation with Dynamic Scaling
   Plotly.newPlot('gradientPlot', [{
@@ -714,6 +975,10 @@ function inspectFrame(idx) {
   });
 
   const thermalPlotEl = document.getElementById('thermalPlot');
+  // Replace the hover handler instead of stacking a new one on every render
+  if (typeof thermalPlotEl.removeAllListeners === "function") {
+    thermalPlotEl.removeAllListeners("plotly_hover");
+  }
   thermalPlotEl.on('plotly_hover', function(data){
     const pt = data.points[0];
     document.getElementById("hoverCoords").innerText = `(${pt.x}, ${pt.y})`;
@@ -1489,4 +1754,8 @@ function applyPlanckRecalibration(matrix, targetEmissivity = 0.95, reflTempC = 2
 }
 
 
-window.onload = initDatabase;
+window.onload = function() {
+  initDatabase();
+  // Reflect the initial pick mode (P1 armed) before any frame is inspected
+  updatePickUIFeedback();
+};

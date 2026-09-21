@@ -8,6 +8,17 @@ import subprocess
 import numpy as np
 from PIL import Image
 
+# Physical validity window (°C) for a radiometric microbolometer payload. The FLIR
+# E8-XT is specified for roughly -20 °C to +550 °C; the wider window leaves headroom
+# for hot lab targets while still rejecting foreign or corrupted captures.
+MIN_VALID_TEMP_C = -50.0
+MAX_VALID_TEMP_C = 1000.0
+
+# Number of newest captures probed when resolving the live frame. A stray screenshot or
+# foreign JPEG at the end of the DCIM folder must not stall /api/v1/thermal-frame, so the
+# driver walks backwards through this many candidates before giving up.
+LIVE_FRAME_LOOKBACK = 3
+
 
 class FlirExtractorNative:
     """Native FLIR thermal extractor using ExifTool.
@@ -57,7 +68,34 @@ class FlirExtractorNative:
         ) + (1.0 - X) * np.exp(-sqrt_d * (alpha2 + beta2 * h2o_term))
         return float(np.clip(tau, 0.1, 1.0))
 
+    def _assert_physical_range(self, temp_celsius: np.ndarray, image_path: str) -> None:
+        """Rejects non-radiometric or corrupted payloads before clients ingest them.
+
+        A missing/foreign RawThermalImage chunk or a mismatched Planck calibration
+        makes the inversion saturate, producing values such as -273 °C or millions of
+        °C. Raising here lets `extract_full_album()` log the file and skip it.
+        """
+        if np.isnan(temp_celsius).any():
+            raise ValueError(
+                f"Non-radiometric or corrupted payload in {image_path}: "
+                "matrix contains NaN values."
+            )
+
+        t_min = float(temp_celsius.min())
+        t_max = float(temp_celsius.max())
+        if t_min < MIN_VALID_TEMP_C or t_max > MAX_VALID_TEMP_C:
+            raise ValueError(
+                f"Non-radiometric or corrupted payload in {image_path}: "
+                f"Range [{t_min}, {t_max}] °C outside physical limits "
+                f"[{MIN_VALID_TEMP_C}, {MAX_VALID_TEMP_C}] °C."
+            )
+
     def extract_thermal_matrix(self, image_path: str) -> np.ndarray:
+        """Converts a radiometric FLIR JPEG into a 2D °C matrix.
+
+        Raises ValueError when the capture carries no usable radiometric payload,
+        or when the inverted temperatures fall outside physical limits.
+        """
         if not os.path.exists(image_path):
             raise FileNotFoundError(f"Thermal image not found: {image_path}")
 
@@ -129,9 +167,12 @@ class FlirExtractorNative:
         val = np.maximum(val, 1.0001)
 
         temp_kelvin = B / np.log(val)
-        temp_celsius = temp_kelvin - 273.15
+        temp_celsius = np.round(temp_kelvin - 273.15, 2)
 
-        return np.round(temp_celsius, 2)
+        # 6. Sanity guard: discard captures that are not genuine radiometric data
+        self._assert_physical_range(temp_celsius, image_path)
+
+        return temp_celsius
 
 
 class RealFlirCamera:
@@ -142,51 +183,140 @@ class RealFlirCamera:
         camera_mount_path="/media/raspberrypi_local/07F5-01A9/DCIM/100_FLIR",
         # In flir_hardware.py or main.py
         #camera_mount_path = "./",
+        max_lookup: int = LIVE_FRAME_LOOKBACK,
     ):
         self.mount_path = camera_mount_path
         self.extractor = FlirExtractorNative()
+        # Size of the reverse-scan window used by the live frame route
+        self.max_lookup = max(1, int(max_lookup))
+        # Bounded probe cache: path -> ((mtime, size), frame dict or None).
+        # Keeps the 1 Hz live poll from re-running ExifTool on unchanged candidates,
+        # while mtime + size still invalidate entries when a file is replaced.
+        # Holds at most `max_lookup` frames (~the candidate window).
+        self._probe_cache = {}
 
     def get_all_images(self) -> list:
         files = glob.glob(os.path.join(self.mount_path, "*.jpg")) + glob.glob(
             os.path.join(self.mount_path, "*.JPG")
         )
-        files.sort(key=os.path.getmtime)
+        # The two globs append every capture twice on case-insensitive filesystems
+        # (Windows, or a FAT-formatted camera SD card), which would duplicate frames
+        # and corrupt "most recent N captures" slicing. Keep one entry per file.
+        unique_files = {}
+        for file_path in files:
+            unique_files.setdefault(os.path.normcase(os.path.abspath(file_path)), file_path)
+        files = sorted(unique_files.values(), key=os.path.getmtime)
         return files
 
-    def get_latest_image_info(self) -> dict:
+    def _candidate_capture_paths(self, max_lookup: int = None) -> list:
+        """Returns up to `max_lookup` newest capture paths, newest first."""
         files = self.get_all_images()
+        if not files and os.path.exists("sample_flir.jpg"):
+            files = ["sample_flir.jpg"]
         if not files:
-            if os.path.exists("sample_flir.jpg"):
-                return {
-                    "path": "sample_flir.jpg",
-                    "name": "sample_flir.jpg",
-                    "mtime": os.path.getmtime("sample_flir.jpg"),
-                }
             raise FileNotFoundError(
                 f"No FLIR JPEG files found in {self.mount_path} or local"
                 " directory."
             )
 
-        latest = files[-1]
-        return {
-            "path": latest,
-            "name": os.path.basename(latest),
-            "mtime": os.path.getmtime(latest),
+        lookup = max(1, int(max_lookup or self.max_lookup))
+        return files[-lookup:][::-1]
+
+    def _probe_capture(self, path: str) -> tuple:
+        """Extracts one candidate, caching the outcome.
+
+        Returns (frame_dict, None) for a physically valid radiometric capture, or
+        (None, error_message) when the file is foreign/corrupted/unreadable.
+        """
+        try:
+            stat = os.stat(path)
+            stamp = (stat.st_mtime, stat.st_size)
+        except OSError as err:
+            return None, f"{os.path.basename(path)} unavailable: {err}"
+
+        cached = self._probe_cache.get(path)
+        if cached and cached[0] == stamp:
+            return cached[1], None if cached[1] else f"{os.path.basename(path)} previously rejected"
+
+        try:
+            matrix = self.extractor.extract_thermal_matrix(path)
+            frame = {
+                "name": os.path.basename(path),
+                "mtime": stat.st_mtime,
+                "width": int(matrix.shape[1]),
+                "height": int(matrix.shape[0]),
+                "data": matrix.tolist(),
+            }
+            error = None
+        except (ValueError, RuntimeError, OSError) as err:
+            # ValueError: radiometric sanity guard / missing raw thermal chunk
+            # RuntimeError: ExifTool failure, OSError: unreadable or vanished file
+            print(
+                f"[WARN] Live frame skipped invalid candidate "
+                f"{os.path.basename(path)}: {err}"
+            )
+            frame, error = None, str(err)
+
+        self._probe_cache[path] = (stamp, frame)
+        return frame, error
+
+    def _resolve_live_frame(self, max_lookup: int = None) -> tuple:
+        """Newest physically valid radiometric capture within the lookup window.
+
+        Returns (path, frame_dict). Raises ValueError when every candidate in the
+        window is rejected, so the caller fails loudly instead of serving garbage.
+        """
+        candidates = self._candidate_capture_paths(max_lookup)
+
+        # Keep the cache bounded to the current window (memory = window x one frame)
+        window = set(candidates)
+        self._probe_cache = {
+            path: entry for path, entry in self._probe_cache.items() if path in window
         }
 
-    def capture_radiometric_matrix(self) -> dict:
-        info = self.get_latest_image_info()
-        matrix = self.extractor.extract_thermal_matrix(info["path"])
-        return {
-            "name": info["name"],
-            "mtime": info["mtime"],
-            "width": int(matrix.shape[1]),
-            "height": int(matrix.shape[0]),
-            "data": matrix.tolist(),
-        }
+        last_error = "no candidates inspected"
+        for path in candidates:
+            frame, error = self._probe_capture(path)
+            if frame is not None:
+                return path, frame
+            last_error = error or last_error
 
-    def extract_full_album(self) -> list:
+        raise ValueError(
+            "Failed to find a valid radiometric capture within the last "
+            f"{len(candidates)} file(s) of {self.mount_path}. Last error: {last_error}"
+        )
+
+    def get_latest_image_info(self, max_lookup: int = None) -> dict:
+        """Newest usable capture, used by the live route's change detection.
+
+        Resolving the newest *valid* capture here (rather than the newest file on the
+        mount) keeps the `if_modified_since` watermark identical to the frames the
+        client actually receives. Otherwise a stray non-radiometric file at the end of
+        the DCIM folder would keep the endpoint re-delivering the same frame forever.
+        """
+        path, frame = self._resolve_live_frame(max_lookup)
+        return {"path": path, "name": frame["name"], "mtime": frame["mtime"]}
+
+    def capture_radiometric_matrix(self, max_lookup: int = None) -> dict:
+        """Attempts extraction from the newest files on the mount, scanning
+        backwards up to `max_lookup` candidates if corrupted or non-radiometric
+        files are encountered.
+        """
+        _path, frame = self._resolve_live_frame(max_lookup)
+        return frame
+
+    def extract_full_album(self, limit: int = 0) -> list:
+        """Extracts the camera album in chronological order (oldest first).
+
+        `limit` > 0 restricts the scan to the `limit` most recent captures
+        (files are pre-sorted by mtime), which avoids running ExifTool over
+        shots that were already ingested by the client. `limit` <= 0 returns
+        the complete album.
+        """
         files = self.get_all_images()
+        if limit and limit > 0:
+            files = files[-int(limit):]
+
         album = []
         for file_path in files:
             try:

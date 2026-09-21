@@ -115,10 +115,21 @@
     <!-- SECTION 2: STREAM & BATCH CONTROLS (ALWAYS ACCESSIBLE) -->
     <div class="bg-slate-900 border border-slate-800 p-4 rounded-lg flex flex-wrap justify-between items-center gap-4">
       <div class="flex items-center gap-3">
-        <button id="btnImport" onclick="startImportStream()" 
+        <button id="btnImport" onclick="startImportStream()" title="Ingest every capture currently stored on the camera"
                 class="bg-slate-800 hover:bg-slate-700 text-slate-100 border border-slate-600 px-4 py-1.5 rounded text-xs font-mono transition">
           START STREAM
         </button>
+        <!-- Incremental ingestion: pull only the newest N camera captures -->
+        <div class="flex items-center gap-2 bg-slate-950 border border-slate-800 rounded px-2 py-1">
+          <label for="cfgIngestCount" class="text-[11px] text-slate-500 font-mono">LAST</label>
+          <input id="cfgIngestCount" type="number" min="1" max="999" step="1" value="4" title="How many of the most recent camera shots to ingest"
+                 class="w-14 bg-slate-900 border border-slate-700 rounded px-2 py-1 text-slate-200 text-xs font-mono focus:outline-none focus:border-slate-500">
+          <label for="cfgIngestCount" class="text-[11px] text-slate-500 font-mono">SHOTS</label>
+          <button id="btnImportLastN" onclick="ingestLastN()" title="Ingest only the newest N captures from the camera album"
+                  class="bg-slate-800 hover:bg-slate-700 text-slate-100 border border-slate-600 px-3 py-1 rounded text-xs font-mono transition">
+            INGEST LAST N
+          </button>
+        </div>
         <button id="btnStop" onclick="stopImportStream()" disabled 
                 class="bg-slate-950 text-slate-600 border border-slate-800 opacity-50 cursor-not-allowed px-4 py-1.5 rounded text-xs font-mono transition">
           STOP STREAM
@@ -280,22 +291,39 @@
         </summary>
         
         <div class="p-4 space-y-4">
+          <!-- Interactive point picker: click the 2D thermogram to set P1 / P2 -->
+          <div class="flex flex-wrap items-center gap-3 bg-slate-950 p-2.5 rounded border border-slate-800">
+            <span class="text-[11px] font-bold uppercase tracking-wider text-slate-400 font-mono">Pick on 2D map:</span>
+            <button id="btnPickP1" type="button" onclick="setPointPickMode('P1')"
+                    class="px-2.5 py-1 text-[11px] font-mono rounded bg-slate-800 hover:bg-cyan-600 hover:text-slate-950 text-cyan-400 border border-cyan-800 transition">
+              Pick P1
+            </button>
+            <button id="btnPickP2" type="button" onclick="setPointPickMode('P2')"
+                    class="px-2.5 py-1 text-[11px] font-mono rounded bg-slate-800 hover:bg-amber-500 hover:text-slate-950 text-amber-400 border border-amber-800 transition">
+              Pick P2
+            </button>
+            <span class="text-[11px] text-slate-500 font-mono">Auto-advances P1 &rarr; P2</span>
+            <span id="lblPickStatus" class="text-[11px] font-mono text-slate-400 ml-auto">
+              Click the 2D map to set P1 (cyan)
+            </span>
+          </div>
+
           <div class="grid grid-cols-2 md:grid-cols-6 gap-4 text-xs font-mono">
             <div>
               <label class="block text-slate-500 mb-1">Point 1 X (P1_X)</label>
-              <input id="pt1X" type="number" value="20" min="0" onchange="replotActiveCanvas()" class="w-full bg-slate-950 border border-slate-800 text-slate-200 rounded px-2 py-1">
+              <input id="pt1X" type="number" value="20" min="0" onchange="syncManualPointInput()" class="w-full bg-slate-950 border border-slate-800 text-slate-200 rounded px-2 py-1">
             </div>
             <div>
               <label class="block text-slate-500 mb-1">Point 1 Y (P1_Y)</label>
-              <input id="pt1Y" type="number" value="20" min="0" onchange="replotActiveCanvas()" class="w-full bg-slate-950 border border-slate-800 text-slate-200 rounded px-2 py-1">
+              <input id="pt1Y" type="number" value="20" min="0" onchange="syncManualPointInput()" class="w-full bg-slate-950 border border-slate-800 text-slate-200 rounded px-2 py-1">
             </div>
             <div>
               <label class="block text-slate-500 mb-1">Point 2 X (P2_X)</label>
-              <input id="pt2X" type="number" value="40" min="0" onchange="replotActiveCanvas()" class="w-full bg-slate-950 border border-slate-800 text-slate-200 rounded px-2 py-1">
+              <input id="pt2X" type="number" value="40" min="0" onchange="syncManualPointInput()" class="w-full bg-slate-950 border border-slate-800 text-slate-200 rounded px-2 py-1">
             </div>
             <div>
               <label class="block text-slate-500 mb-1">Point 2 Y (P2_Y)</label>
-              <input id="pt2Y" type="number" value="40" min="0" onchange="replotActiveCanvas()" class="w-full bg-slate-950 border border-slate-800 text-slate-200 rounded px-2 py-1">
+              <input id="pt2Y" type="number" value="40" min="0" onchange="syncManualPointInput()" class="w-full bg-slate-950 border border-slate-800 text-slate-200 rounded px-2 py-1">
             </div>
             <div>
               <label class="block text-slate-500 mb-1">P1 Temperature</label>
