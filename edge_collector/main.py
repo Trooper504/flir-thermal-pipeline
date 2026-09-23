@@ -4,7 +4,9 @@ import inspect
 import numpy as np
 from fastapi import FastAPI, HTTPException, Response, status
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import StreamingResponse
 from mock_flir import MockFlirCamera
+from live_stream_driver import LiveStreamDriver, coordinate_snapshot
 
 app = FastAPI(title="FLIR E8-XT Raspberry Pi Edge Collector")
 
@@ -32,6 +34,10 @@ else:
     print("[INFO] Running in Simulation Mode (MockFlirCamera).")
     camera_driver = MockFlirCamera()
 
+# Live viewfinder MJPEG reader. Device binding stays explicit (FLIR_VIDEO_INDEX /
+# ?index=) because cv2.VideoCapture cannot see the E8-XT's mass-storage interface.
+stream_driver = LiveStreamDriver()
+
 
 @app.get("/")
 def read_root():
@@ -42,7 +48,10 @@ def read_root():
         "endpoints": {
             "latest_frame": "/api/v1/thermal-frame",
             "full_album": "/api/v1/thermal-album",
-            "recent_album": "/api/v1/thermal-album?limit=N"
+            "recent_album": "/api/v1/thermal-album?limit=N",
+            "stream_devices": "/api/v1/stream/devices",
+            "live_mjpeg": "/api/v1/stream/live-mjpeg",
+            "trigger_snapshot": "POST /api/v1/camera/trigger-snapshot"
         }
     }
 
@@ -146,6 +155,108 @@ def get_thermal_album(limit: int = 0):
             "requested_limit": limit,
             "frames": sim_frames
         }
+
+
+@app.get("/api/v1/stream/devices")
+def get_stream_devices(probe: bool = False):
+    """Lists the capture bindings available to the MJPEG route, plus the active one.
+
+    `probe=true` opens each candidate index in turn (properties only - no frames are
+    read) so an operator can find which index their hardware answers on.
+    """
+    payload = {
+        "status": "success",
+        "driver": stream_driver.status(),
+        "note": (
+            "The FLIR E-series exposes USB mass storage, not a UVC / DirectShow / V4L2 "
+            "video interface, so cv2.VideoCapture will not list the thermal camera. Bind "
+            "a device explicitly (FLIR_VIDEO_INDEX or ?index=N) and check that the "
+            "reported resolution matches the source you intend to view."
+        )
+    }
+    if probe:
+        payload["devices"] = stream_driver.probe_devices()
+    return payload
+
+
+@app.get("/api/v1/stream/live-mjpeg")
+def get_live_mjpeg(index: int = -1, backend: str = "", frames: int = 0):
+    """
+    Streams the 8-bit viewfinder as MJPEG (multipart/x-mixed-replace), paced at the
+    E8-XT's 9 Hz. `index=-1` keeps the driver's configured/default binding; `frames`
+    caps the stream for diagnostics (0 = unlimited).
+    """
+    device = stream_driver.open_device(index=index, backend=backend)
+    if device is None:
+        raise HTTPException(
+            status_code=503,
+            detail={
+                "error": "No MJPEG capture device available",
+                "hint": (
+                    "No video capture index could be opened. The thermal camera itself is "
+                    "not UVC, so this is expected when no external video source is attached. "
+                    "Use radiometric polling of /api/v1/thermal-frame instead - it streams "
+                    "real thermal data at 9 Hz without video hardware."
+                ),
+                "driver": stream_driver.status()
+            }
+        )
+
+    boundary = b"frame"
+    print(
+        f"[INFO] MJPEG stream started on index {device['index']} ({device['backend']}), "
+        f"{device['width']}x{device['height']} @ {device['fps']} fps"
+    )
+
+    return StreamingResponse(
+        stream_driver.mjpeg_generator(boundary=boundary, max_frames=frames if frames and frames > 0 else None),
+        media_type="multipart/x-mixed-replace; boundary=frame",
+        headers={"Cache-Control": "no-store, no-cache, must-revalidate", "Pragma": "no-cache"}
+    )
+
+
+@app.post("/api/v1/camera/trigger-snapshot")
+def trigger_camera_snapshot(wait_seconds: float = 4.0, external_command: str = ""):
+    """
+    Coordinates a snapshot and returns the newest physically valid radiometric frame.
+
+    Runs an external trigger command only when one is configured (`FLIR_TRIGGER_CMD` or
+    the `external_command` parameter), waits (bounded) for the camera to write a new
+    file, then extracts it through the normal Planck pipeline. USB power / sysfs are
+    deliberately never touched: unbinding the storage interface would only reset the SD
+    reader that album ingestion relies on and cannot fire the instrument shutter.
+    """
+    try:
+        result = coordinate_snapshot(
+            camera_driver,
+            wait_seconds=wait_seconds,
+            external_command=external_command or None
+        )
+    except Exception as err:
+        print(f"[ERROR] Snapshot coordination failed: {err}")
+        raise HTTPException(status_code=500, detail=f"Snapshot coordination failed: {str(err)}")
+
+    frame = result["frame"]
+    matrix = np.array(frame["data"], dtype=np.float32)
+
+    return {
+        "status": "success",
+        "trigger": result["trigger"],
+        "externalCommand": result["externalCommand"],
+        "externalCommandError": result["externalCommandError"],
+        "newFilesDetected": result["newFilesDetected"],
+        "newFileDetection": result.get("newFileDetection"),
+        "waitedSeconds": result["waitedSeconds"],
+        "filename": frame["name"],
+        "mtime": frame["mtime"],
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "width": int(matrix.shape[1]),
+        "height": int(matrix.shape[0]),
+        "min_temp": float(np.round(matrix.min(), 2)),
+        "max_temp": float(np.round(matrix.max(), 2)),
+        "unit": "degC",
+        "data": frame["data"]
+    }
 
 
 if __name__ == "__main__":

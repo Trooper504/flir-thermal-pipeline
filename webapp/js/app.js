@@ -277,15 +277,16 @@ function setIngestTriggerState(disabled) {
 }
 
 function getApiEndpoint() {
+  // Resolved through apiConfig.js so a Pi-hosted collector works from a laptop browser.
+  // Falls back to a local base if apiConfig.js was not loaded (stale cached page).
   const inputEl = document.getElementById("cfgApiUrl");
-  let url = inputEl ? inputEl.value.trim() : "";
-  if (!url) url = "http://localhost:8081";
-  url = url.replace(/\/+$/, "");
-  // Ensure the endpoint path is attached
-  if (!url.endsWith("/api/v1/thermal-frame")) {
-    url += "/api/v1/thermal-frame";
-  }
-  return url;
+  const value = inputEl ? inputEl.value : "";
+
+  const base = typeof collectorEndpoint === "function"
+    ? collectorEndpoint("/api/v1/thermal-frame", value)
+    : `${(value || "http://localhost:8081").replace(/\/+$/, "").replace(/\/api\/v1\/.*$/, "")}/api/v1/thermal-frame`;
+
+  return base.endsWith("/api/v1/thermal-frame") ? base : `${base}/api/v1/thermal-frame`;
 }
 
 /**
@@ -1758,4 +1759,6 @@ window.onload = function() {
   initDatabase();
   // Reflect the initial pick mode (P1 armed) before any frame is inspected
   updatePickUIFeedback();
+  // Point the collector field at the Pi (remembered value, else page-derived host)
+  if (typeof prefillCollectorEndpoint === "function") prefillCollectorEndpoint("cfgApiUrl");
 };

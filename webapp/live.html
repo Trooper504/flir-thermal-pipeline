@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>FLIR Live Video &amp; Acquisition Studio</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-slate-950 text-slate-100 font-sans p-5 min-h-screen">
+  <header class="flex flex-wrap justify-between items-center gap-3 mb-4">
+    <div>
+      <h1 class="text-xl font-bold tracking-wide">FLIR Live Video &amp; Acquisition Studio</h1>
+      <p class="text-xs text-slate-400 font-mono">Real-time viewfinder, shutter trigger &amp; capture hand-off</p>
+    </div>
+    <nav class="flex items-center gap-2 text-xs font-mono">
+      <a href="index.html" class="px-3 py-1.5 rounded border border-slate-700 bg-slate-900 hover:bg-slate-800 text-slate-300 transition">&larr; Workbench (album / streams)</a>
+      <a href="micro_inspector.html" class="px-3 py-1.5 rounded border border-cyan-800 bg-slate-900 hover:bg-cyan-900/40 text-cyan-400 transition">Micro Inspector</a>
+    </nav>
+  </header>
+
+  <!-- SOURCE + CONTROLS -->
+  <div class="bg-slate-900 border border-slate-800 rounded-lg p-4 mb-4">
+    <div class="grid grid-cols-1 md:grid-cols-4 gap-3 text-xs font-mono items-end">
+      <div>
+        <label class="block text-slate-400 mb-1">Pi Endpoint</label>
+        <input id="liveApiUrl" type="text" value="http://localhost:8081/api/v1/thermal-frame"
+               onchange="persistCollectorEndpoint(this)"
+               class="w-full bg-slate-950 border border-slate-700 rounded px-2 py-1.5 text-slate-200 focus:outline-none focus:border-slate-500">
+        <span class="block mt-1 text-[10px] text-slate-500 font-mono">
+          Pi's address, e.g. <span class="text-slate-400">http://192.168.1.42:8081</span> (remembered in this browser)
+        </span>
+      </div>
+      <div>
+        <label class="block text-slate-400 mb-1">Source Mode</label>
+        <select id="liveSourceMode"
+                class="w-full bg-slate-950 border border-slate-700 rounded px-2 py-1.5 text-slate-200 focus:outline-none focus:border-slate-500">
+          <option value="mjpeg" selected>MJPEG viewfinder (video device)</option>
+          <option value="radiometric">Radiometric polling (thermal at 9 Hz)</option>
+        </select>
+      </div>
+      <div>
+        <label class="block text-slate-400 mb-1">Video Index (-1 = configured)</label>
+        <input id="liveVideoIndex" type="number" value="-1" min="-1" max="9"
+               class="w-full bg-slate-950 border border-slate-700 rounded px-2 py-1.5 text-slate-200">
+      </div>
+      <div class="flex flex-wrap items-center gap-2">
+        <button id="btnLiveStart" onclick="toggleLiveFeed()"
+                class="px-4 py-1.5 rounded border border-emerald-600 bg-slate-800 hover:bg-emerald-700/40 text-emerald-300 text-xs font-mono transition">
+          START LIVE
+        </button>
+        <button onclick="triggerSnapshotAndAnalyze()"
+                class="px-4 py-1.5 rounded border border-amber-700 bg-slate-800 hover:bg-amber-700/40 text-amber-300 text-xs font-mono transition">
+          TRIGGER SNAPSHOT
+        </button>
+        <button onclick="probeStreamDevices()"
+                class="px-3 py-1.5 rounded border border-slate-700 bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-mono transition">
+          PROBE DEVICES
+        </button>
+      </div>
+    </div>
+    <p class="mt-3 text-[11px] text-slate-500 font-mono leading-relaxed">
+      <strong class="text-slate-400">Hardware note:</strong> the FLIR E8-XT is a USB mass-storage instrument &mdash; it does not
+      expose a UVC / DirectShow / V4L2 video interface, so OpenCV cannot enumerate it. On the Pi, MJPEG mode needs a real video
+      device (check <code>ls /dev/video*</code>; a USB video grabber wired to the camera's video output appears there), otherwise
+      the collector answers HTTP 503. <strong class="text-slate-400">Radiometric polling</strong> needs no video hardware: it
+      streams genuine Planck-calibrated frames from <code>/api/v1/thermal-frame</code>, updated as fast as the Pi can extract a
+      new capture (typically 0.5&ndash;2 s per shot, not the E8-XT's 9 Hz).
+    </p>
+  </div>
+
+  <div class="grid grid-cols-1 lg:grid-cols-3 gap-4">
+    <!-- VIEWPORT -->
+    <div class="lg:col-span-2 bg-slate-900 border border-slate-800 rounded-lg p-3">
+      <h3 class="text-[11px] font-bold font-mono text-slate-400 mb-2">VIEWFINDER</h3>
+      <div class="relative w-full bg-slate-950 border border-slate-800 rounded overflow-hidden" style="aspect-ratio: 4 / 3;">
+        <img id="liveViewport" alt="" class="w-full h-full object-contain hidden">
+        <canvas id="liveRadiometricCanvas" class="w-full h-full hidden"></canvas>
+
+        <!-- On-screen display: crosshair + focus target + status -->
+        <div id="liveOsd" class="absolute inset-0 pointer-events-none hidden">
+          <div class="absolute inset-0 flex items-center justify-center">
+            <div class="w-24 h-24 border border-emerald-500/40 rounded-full"></div>
+            <div class="absolute w-40 h-[1px] bg-emerald-500/40"></div>
+            <div class="absolute h-40 w-[1px] bg-emerald-500/40"></div>
+            <div class="absolute w-3 h-3 border border-emerald-400 rounded-full"></div>
+          </div>
+          <div class="absolute top-2 left-2 flex items-center gap-2 text-[11px] font-mono">
+            <span class="px-1.5 py-0.5 rounded bg-rose-950/80 border border-rose-700 text-rose-300">LIVE</span>
+            <span id="liveOsdMode" class="text-slate-300"></span>
+          </div>
+          <div class="absolute top-2 right-2 text-[11px] font-mono text-slate-300" id="liveOsdResolution">--</div>
+          <div class="absolute bottom-2 right-2 text-[11px] font-mono text-slate-300" id="liveOsdFps">-- fps</div>
+          <div class="absolute bottom-2 left-2 text-[11px] font-mono text-slate-400" id="liveOsdClock">--:--:--</div>
+        </div>
+
+        <div id="livePlaceholder" class="absolute inset-0 flex flex-col items-center justify-center text-center gap-2 p-6">
+          <span class="text-xs font-mono text-slate-500">Viewfinder idle &mdash; press START LIVE</span>
+          <span class="text-[11px] font-mono text-slate-600">or use radiometric polling for a hardware-free thermal feed</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- TELEMETRY / HAND-OFF / LOG -->
+    <div class="space-y-4">
+      <div class="bg-slate-900 border border-slate-800 rounded-lg p-3">
+        <h3 class="text-[11px] font-bold font-mono text-slate-400 mb-2">TELEMETRY</h3>
+        <div class="space-y-1.5 text-xs font-mono">
+          <div class="flex justify-between"><span class="text-slate-500">State:</span><span id="liveTlmState" class="text-slate-200">idle</span></div>
+          <div class="flex justify-between"><span class="text-slate-500">Resolution:</span><span id="liveTlmResolution" class="text-slate-200">--</span></div>
+          <div class="flex justify-between"><span class="text-slate-500">Measured FPS:</span><span id="liveTlmFps" class="text-slate-200">--</span></div>
+          <div class="flex justify-between"><span class="text-slate-500">Frames:</span><span id="liveTlmFrames" class="text-slate-200">0</span></div>
+          <div class="flex justify-between"><span class="text-slate-500">Device:</span><span id="liveTlmDevice" class="text-slate-200">--</span></div>
+          <div class="flex justify-between"><span class="text-slate-500">Thermal frame:</span><span id="liveTlmThermal" class="text-cyan-400">--</span></div>
+          <div class="flex justify-between"><span class="text-slate-500">Min / Max:</span><span id="liveTlmTemps" class="text-slate-200">--</span></div>
+        </div>
+      </div>
+
+      <div class="bg-slate-900 border border-slate-800 rounded-lg p-3">
+        <h3 class="text-[11px] font-bold font-mono text-slate-400 mb-2">CAPTURE HAND-OFF</h3>
+        <div id="liveCaptureResult" class="text-[11px] font-mono text-slate-400 leading-relaxed">
+          No snapshot captured yet.
+        </div>
+      </div>
+
+      <div class="bg-slate-900 border border-slate-800 rounded-lg p-3">
+        <h3 class="text-[11px] font-bold font-mono text-slate-400 mb-2">EVENT LOG</h3>
+        <div id="liveLog" class="text-[11px] font-mono text-slate-400 space-y-1 max-h-56 overflow-y-auto"></div>
+      </div>
+    </div>
+  </div>
+
+  <footer class="mt-4 text-[11px] text-slate-500 font-mono">
+    Radiometric polling pushes genuine Planck-calibrated matrices, so the min / max readout updates every frame; MJPEG mode
+    reports the bound video device's own resolution and frame rate.
+  </footer>
+
+  <script src="js/apiConfig.js"></script>
+  <script src="js/liveApp.js"></script>
+</body>
+</html>

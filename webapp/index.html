@@ -18,6 +18,16 @@
         <p class="text-xs text-slate-400 font-mono">Edge Ingestion, Spatial Gradient Processing, and Differential Analysis</p>
       </div>
       <div class="flex items-center gap-2">
+        <nav class="flex items-center gap-2 text-xs font-mono mr-2">
+          <a href="live.html" title="Real-time viewfinder, shutter trigger and capture hand-off"
+             class="px-3 py-1 rounded border border-emerald-800 bg-slate-900 hover:bg-emerald-900/40 text-emerald-400 transition">
+            Live Studio
+          </a>
+          <a href="micro_inspector.html" title="Sub-millimetre particle, flux and divergence analysis"
+             class="px-3 py-1 rounded border border-cyan-800 bg-slate-900 hover:bg-cyan-900/40 text-cyan-400 transition">
+            Micro Inspector
+          </a>
+        </nav>
         <span id="statusBadge" class="px-3 py-1 bg-slate-900 border border-slate-700 rounded text-xs font-mono text-slate-300">
           SYSTEM IDLE
         </span>
@@ -72,7 +82,11 @@
           <div>
             <label class="block text-slate-400 mb-1">Pi Endpoint</label>
             <input id="cfgApiUrl" type="text" value="http://localhost:8081/api/v1/thermal-frame" disabled
+                   onchange="persistCollectorEndpoint(this)"
                    class="w-full bg-slate-950 border border-slate-800 rounded px-2 py-1.5 text-slate-600 opacity-60">
+            <span class="block mt-1 text-[10px] text-slate-500 font-mono leading-snug">
+              Laptop-only client: use the Pi's address, e.g. <span class="text-slate-400">http://192.168.1.42:8081</span> (remembered in this browser).
+            </span>
           </div>
         </div>
 
@@ -835,6 +849,7 @@
   </div>
 
   <!-- Custom Application Modules -->
+  <script src="js/apiConfig.js"></script>
   <script src="js/thermalEngine.js"></script>
   <script src="js/gifEngine.js"></script>
   <script src="js/app.js"></script>
