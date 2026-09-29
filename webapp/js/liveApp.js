@@ -355,7 +355,7 @@ async function triggerSnapshotAndAnalyze() {
 async function probeStreamDevices() {
   setLiveState('probing capture devices');
   try {
-    const res = await fetch(`${liveBaseApi()}/api/v1/stream/devices?probe=true`);
+    const res = await fetch(`${liveBaseApi()}/api/v1/stream/devices?capabilities=true`);
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const payload = await res.json();
     const devices = payload.devices || [];
@@ -513,7 +513,7 @@ async function probeStreamCapabilities() {
   if (panel) panel.innerText = 'Probing capture interfaces\u2026';
 
   try {
-    const url = `${liveBaseApi()}/api/v1/stream/devices?probe=true&capabilities=true` +
+    const url = `${liveBaseApi()}/api/v1/stream/devices?capabilities=true` +
       `&read_test=${readTest}&fresh=${fresh}`;
     const res = await fetch(url);
     if (!res.ok) throw new Error(`HTTP ${res.status}`);

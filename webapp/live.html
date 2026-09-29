@@ -56,16 +56,24 @@
                 class="px-3 py-1.5 rounded border border-slate-700 bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-mono transition">
           PROBE DEVICES
         </button>
+        <button onclick="probeStreamCapabilities()"
+                class="px-3 py-1.5 rounded border border-cyan-800 bg-slate-800 hover:bg-cyan-900/40 text-cyan-300 text-xs font-mono transition">
+          UVC CAPABILITY PROBE
+        </button>
+        <label class="flex items-center gap-1 text-[10px] text-slate-400 font-mono"
+               title="Reads one frame per index to prove the node really streams: a UVC metadata node opens happily and then never delivers an image.">
+          <input id="liveReadTest" type="checkbox" class="accent-cyan-500"> read 1 frame
+        </label>
       </div>
     </div>
-    <p class="mt-3 text-[11px] text-slate-500 font-mono leading-relaxed">
+    <!-- <p class="mt-3 text-[11px] text-slate-500 font-mono leading-relaxed">
       <strong class="text-slate-400">Hardware note:</strong> the FLIR E8-XT is a USB mass-storage instrument &mdash; it does not
       expose a UVC / DirectShow / V4L2 video interface, so OpenCV cannot enumerate it. On the Pi, MJPEG mode needs a real video
       device (check <code>ls /dev/video*</code>; a USB video grabber wired to the camera's video output appears there), otherwise
       the collector answers HTTP 503. <strong class="text-slate-400">Radiometric polling</strong> needs no video hardware: it
       streams genuine Planck-calibrated frames from <code>/api/v1/thermal-frame</code>, updated as fast as the Pi can extract a
       new capture (typically 0.5&ndash;2 s per shot, not the E8-XT's 9 Hz).
-    </p>
+    </p> -->
   </div>
 
   <div class="grid grid-cols-1 lg:grid-cols-3 gap-4">
@@ -123,6 +131,14 @@
       </div>
 
       <div class="bg-slate-900 border border-slate-800 rounded-lg p-3">
+        <h3 class="text-[11px] font-bold font-mono text-slate-400 mb-2">UVC CAPABILITY PROBE</h3>
+        <div id="liveCapabilities" class="text-[11px] font-mono text-slate-400 leading-relaxed">
+          Not probed yet. Press <span class="text-cyan-400">UVC CAPABILITY PROBE</span> to ask the collector host
+          which video interfaces, pixel formats and controls really exist instead of assuming.
+        </div>
+      </div>
+
+      <div class="bg-slate-900 border border-slate-800 rounded-lg p-3">
         <h3 class="text-[11px] font-bold font-mono text-slate-400 mb-2">EVENT LOG</h3>
         <div id="liveLog" class="text-[11px] font-mono text-slate-400 space-y-1 max-h-56 overflow-y-auto"></div>
       </div>
@@ -131,7 +147,9 @@
 
   <footer class="mt-4 text-[11px] text-slate-500 font-mono">
     Radiometric polling pushes genuine Planck-calibrated matrices, so the min / max readout updates every frame; MJPEG mode
-    reports the bound video device's own resolution and frame rate.
+    reports the bound video device's own resolution and frame rate. The capability probe reports what the collector host's
+    video interfaces actually advertise &mdash; pixel format, USB interface class and controls &mdash; so a viewfinder stream
+    is never mistaken for a calibrated one.
   </footer>
 
   <script src="js/apiConfig.js"></script>
