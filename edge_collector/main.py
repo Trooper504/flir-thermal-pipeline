@@ -50,6 +50,7 @@ def read_root():
             "full_album": "/api/v1/thermal-album",
             "recent_album": "/api/v1/thermal-album?limit=N",
             "stream_devices": "/api/v1/stream/devices",
+            "stream_capabilities": "/api/v1/stream/devices?capabilities=true",
             "live_mjpeg": "/api/v1/stream/live-mjpeg",
             "trigger_snapshot": "POST /api/v1/camera/trigger-snapshot"
         }
@@ -158,11 +159,28 @@ def get_thermal_album(limit: int = 0):
 
 
 @app.get("/api/v1/stream/devices")
-def get_stream_devices(probe: bool = False):
+def get_stream_devices(probe: bool = False, capabilities: bool = False,
+                       read_test: bool = False, max_index: int = 0,
+                       budget_seconds: float = 0.0, fresh: bool = False):
     """Lists the capture bindings available to the MJPEG route, plus the active one.
 
     `probe=true` opens each candidate index in turn (properties only - no frames are
     read) so an operator can find which index their hardware answers on.
+
+    `capabilities=true` answers the UVC question with evidence instead of assumption: per
+    index it reports the fourcc OpenCV negotiated, the USB interface class behind
+    `/dev/videoN` (0x0e == USB Video Class), the pixel formats and the control list that
+    `v4l2-ctl` advertises, and a Scenario A (8-bit viewfinder) / Scenario B (16-bit
+    radiometric) verdict. The host's own camera-access policy is reported too
+    (`hostCameraAccess`), because an operating system that refuses a camera to desktop apps
+    presents exactly like wedged hardware: the open succeeds and no frame ever arrives.
+    `read_test=true` additionally reads one frame per index in a child process (so a wedged device
+    can be killed and a crashing camera backend cannot take the API down), which is how a UVC
+    *metadata* node is caught - it opens happily and then never delivers an image. `max_index`
+    bounds the scan (0 keeps the driver's default probe limit) and `budget_seconds` bounds its
+    wall-clock time (0 keeps the driver's default). Probing touches the devices, so an identical
+    repeat within a few seconds is answered from the previous result (`cached: true`) unless
+    `fresh=true` asks for a new measurement.
     """
     payload = {
         "status": "success",
@@ -171,11 +189,23 @@ def get_stream_devices(probe: bool = False):
             "The FLIR E-series exposes USB mass storage, not a UVC / DirectShow / V4L2 "
             "video interface, so cv2.VideoCapture will not list the thermal camera. Bind "
             "a device explicitly (FLIR_VIDEO_INDEX or ?index=N) and check that the "
-            "reported resolution matches the source you intend to view."
+            "reported resolution matches the source you intend to view. That is the "
+            "project's expectation rather than a measurement: ?capabilities=true probes "
+            "the host and reports what is actually attached. Note that this `?probe=true` "
+            "route opens each index in-process, where an OpenCV open cannot be interrupted - "
+            "so on a host whose camera is blocked or wedged it can hang the request. "
+            "?capabilities=true is bounded and is the one to prefer there."
         )
     }
     if probe:
         payload["devices"] = stream_driver.probe_devices()
+    if capabilities:
+        payload["capabilities"] = stream_driver.probe_capabilities(
+            max_index=max_index if max_index > 0 else None,
+            read_test=read_test,
+            budget_seconds=budget_seconds if budget_seconds > 0 else None,
+            fresh=fresh
+        )
     return payload
 
 
@@ -261,4 +291,12 @@ def trigger_camera_snapshot(wait_seconds: float = 4.0, external_command: str = "
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=8081)
+    # The binding is env-driven so the systemd unit (deploy/flir-collector.service) can move the
+    # listener without editing this module. 0.0.0.0:8081 stays the default: it is what the webapp
+    # and desktop client assume, and what the README documents.
+    configured_port = str(os.getenv("FLIR_COLLECTOR_PORT", "8081")).strip()
+    uvicorn.run(
+        app,
+        host=os.getenv("FLIR_COLLECTOR_HOST", "0.0.0.0"),
+        port=int(configured_port) if configured_port.isdigit() else 8081
+    )

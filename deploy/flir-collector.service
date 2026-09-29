@@ -1,0 +1,53 @@
+# FLIR E8-XT edge collector as a systemd service (Raspberry Pi server side).
+#
+# Rendered from a template by deploy/setup_pi.sh, which substitutes this host's service user,
+# repository path, virtualenv name, port and camera mount, then installs, verifies and enables it:
+#
+#     ./deploy/setup_pi.sh --install-service
+#
+# Do not copy this file into /etc/systemd/system unchanged: it still contains placeholders and
+# systemd would take them literally. To install by hand, replace every placeholder first - or run
+# setup_pi.sh --dry-run and copy the rendered unit it prints.
+#
+# Marked fields, in order of appearance:
+#   service user          must be in the video group to reach /dev/video*
+#   repository path       absolute path of this repository on the Pi
+#   virtualenv name       relative to the repository (created by setup_pi.sh)
+#   collector port        8081 is what webapp/ and desktop_client/ assume
+#   camera mount path     where this Pi sees the camera's SD card (FLIR_MOUNT_PATH)
+
+[Unit]
+Description=FLIR E8-XT Edge Collector (FastAPI)
+Documentation=file://__REPO__/README.md
+After=network-online.target
+Wants=network-online.target
+# The camera arrives as USB mass storage, so album ingestion needs its mount to exist first.
+# When nothing is plugged in there is no mount unit and the dependency simply adds nothing.
+RequiresMountsFor=__MOUNT__
+
+[Service]
+Type=simple
+User=__USER__
+WorkingDirectory=__REPO__
+# Binding + mount come from the environment, so the module never has to be edited per host.
+Environment=FLIR_COLLECTOR_HOST=0.0.0.0
+Environment=FLIR_COLLECTOR_PORT=__PORT__
+Environment=FLIR_MOUNT_PATH=__MOUNT__
+# FLIR_VIDEO_INDEX pins the MJPEG viewfinder when more than one /dev/video* node exists, e.g. a
+# UVC node plus its metadata node. Leave it unset to let the driver choose.
+#Environment=FLIR_VIDEO_INDEX=0
+# Uncomment to run without hardware at all (mock driver, no ExifTool, no camera):
+#Environment=USE_SIMULATION=true
+Environment=PYTHONUNBUFFERED=1
+ExecStart=__REPO__/__VENV__/bin/python __REPO__/edge_collector/main.py
+Restart=on-failure
+RestartSec=5
+# uvicorn shuts down cleanly on SIGINT and there is no in-flight work worth a long grace period.
+KillSignal=SIGINT
+TimeoutStopSec=10
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=flir-collector
+
+[Install]
+WantedBy=multi-user.target

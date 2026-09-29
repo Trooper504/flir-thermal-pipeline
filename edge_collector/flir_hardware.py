@@ -19,6 +19,11 @@ MAX_VALID_TEMP_C = 1000.0
 # driver walks backwards through this many candidates before giving up.
 LIVE_FRAME_LOOKBACK = 3
 
+# Where the E8-XT's SD card appears once the host automounts it. Raspberry Pi OS mounts removable
+# media under /media/<user>/, so this default matches the account it was written for and nothing
+# else; FLIR_MOUNT_PATH overrides it (deploy/setup_pi.sh --mount, and the systemd unit).
+DEFAULT_CAMERA_MOUNT_PATH = "/media/raspberrypi_local/07F5-01A9/DCIM/100_FLIR"
+
 
 class FlirExtractorNative:
     """Native FLIR thermal extractor using ExifTool.
@@ -180,11 +185,18 @@ class RealFlirCamera:
 
     def __init__(
         self,
-        camera_mount_path="/media/raspberrypi_local/07F5-01A9/DCIM/100_FLIR",
+        camera_mount_path=DEFAULT_CAMERA_MOUNT_PATH,
         # In flir_hardware.py or main.py
         #camera_mount_path = "./",
         max_lookup: int = LIVE_FRAME_LOOKBACK,
     ):
+        # Raspberry Pi OS automounts the camera's SD card under /media/<user>/, so the default only
+        # matches the account it was written for and a differently named one silently reads 0
+        # frames. FLIR_MOUNT_PATH wins over the default (this is how the systemd unit in deploy/
+        # points the collector at *this* Pi's mount) but never over an explicitly passed path.
+        env_mount = (os.getenv("FLIR_MOUNT_PATH") or "").strip()
+        if env_mount and camera_mount_path == DEFAULT_CAMERA_MOUNT_PATH:
+            camera_mount_path = env_mount
         self.mount_path = camera_mount_path
         self.extractor = FlirExtractorNative()
         # Size of the reverse-scan window used by the live frame route

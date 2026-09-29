@@ -12,10 +12,11 @@ This branch (`feature/web-client`) introduces a modular, browser-based user inte
 ```text
 flir-thermal-pipeline/
 ├── desktop_client/       # Python desktop consumer (desktop_client/app.py)
+├── deploy/               # Raspberry Pi host setup: setup_pi.sh + flir-collector.service
 ├── edge_collector/       # FLIR capture & extraction utilities
 │   ├── flir_hardware.py  # Radiometric extraction, sanity guard, live-frame reverse scan
 │   ├── main.py           # FastAPI routes (frame / album / stream / trigger)
-│   ├── live_stream_driver.py # Bounded MJPEG reader + snapshot coordination
+│   ├── live_stream_driver.py # Bounded MJPEG reader, snapshot coordination, UVC capability probe
 │   └── mock_flir.py      # Hardware-free simulator
 ├── exiftool.exe          # Bundled ExifTool binary for radiometric metadata extraction
 ├── exiftool_files/       # Working directory for ExifTool outputs
@@ -95,6 +96,13 @@ HTML pages, so the browser must be pointed at the Pi rather than at itself:
 ### Prerequisites
 * Python 3.8+
 * Modern Web Browser (Chrome, Firefox, Edge)
+* **ExifTool** — radiometric extraction shells out to `exiftool`, so it must be resolvable from the
+  collector's working directory:
+  * **Raspberry Pi / Linux:** `sudo apt install libimage-exiftool-perl` (lands on `PATH`).
+  * **Windows:** the repository bundles `exiftool.exe` at its root, which Python resolves only when
+    the collector is started **from the repo root** (`python edge_collector/main.py`). Launching it
+    from another directory makes every capture fail to parse - the server logs `[WARN] Error parsing ...`
+    and `/api/v1/thermal-album` returns 0 frames (the client shows `NO PI FRAMES FOUND FOR LAST N`).
 
 ### 1. Install Dependencies
 ```bash
@@ -124,6 +132,55 @@ Then open `http://localhost:8000/` in your browser.
 
 #### Option B — Direct File Access
 Simply double-click or open `webapp/index.html` directly in any web browser.
+
+### 5. Raspberry Pi host setup (server side)
+
+The Pi is the host that owns the camera and serves every endpoint, so the server-side work belongs
+there. `deploy/setup_pi.sh` does it in one pass and is safe to re-run:
+
+```bash
+cd ~/flir-thermal-pipeline
+./deploy/setup_pi.sh --dry-run            # print the plan, change nothing
+./deploy/setup_pi.sh                      # system packages, virtualenv, host checks
+./deploy/setup_pi.sh --install-service    # ...plus flir-collector.service, enabled at boot
+```
+
+What each step is for:
+
+| Step | Why it is needed on the Pi |
+| --- | --- |
+| `apt-get install python3-venv python3-pip libimage-exiftool-perl v4l-utils libgl1 libglib2.0-0 libsm6 libxext6` | ExifTool performs the radiometric extraction, `v4l2-ctl` supplies the pixel-format / control evidence that `?capabilities=true` reports, and the GL libraries are what `import cv2` links against on a headless host |
+| `python3 -m venv venv` + `pip install -r requirements.txt` | the same layout the Windows instructions use (`venv/` is git-ignored). On **32-bit ARM** (`armv7l`) PyPI has no `opencv-python` wheel, so the script installs Debian's `python3-opencv` and creates the venv with `--system-site-packages` rather than compiling for hours |
+| `usermod -aG video <user>` | `/dev/video*` is `root:video 0660`, so the service account cannot see a video device until it is in that group (log out/in, or reboot, for it to take effect) |
+| `deploy/flir-collector.service` → `/etc/systemd/system/` | server-side deploy: starts at boot, restarts on failure, and `RequiresMountsFor=` the camera mount so ingestion cannot race the automount (with nothing plugged in there is no mount unit, so the dependency adds nothing) |
+| host checks | `import cv2/numpy/fastapi/uvicorn`, `exiftool` and `v4l2-ctl` on `PATH`, the `/dev/video*` nodes, and whether the camera mount actually holds JPEGs |
+
+The unit sets the collector's configuration through the environment, so the module is never edited
+per host. Every variable is optional - the defaults reproduce a plain `python3 edge_collector/main.py`:
+
+| Variable | Default | Meaning |
+| --- | --- | --- |
+| `FLIR_COLLECTOR_HOST` / `FLIR_COLLECTOR_PORT` | `0.0.0.0` / `8081` | listener; 8081 is what `webapp/` and `desktop_client/` assume |
+| `FLIR_MOUNT_PATH` | `/media/raspberrypi_local/07F5-01A9/DCIM/100_FLIR` | where the camera's SD card is mounted on **this** host. Raspberry Pi OS mounts removable media under `/media/<user>/`, so a differently named account otherwise reads 0 frames silently |
+| `FLIR_VIDEO_INDEX` / `FLIR_VIDEO_BACKEND` | unset | pins the MJPEG viewfinder when several `/dev/video*` nodes exist (e.g. a UVC node plus its metadata node) |
+| `V4L2_CTL_PATH` | `v4l2-ctl` from `PATH` | override when v4l-utils lives somewhere unusual |
+| `USE_SIMULATION` | `false` | `true` runs the mock driver with no hardware and no ExifTool |
+
+Verify the deployed host with:
+
+```bash
+systemctl status flir-collector                                        # running?
+journalctl -u flir-collector -f                                        # logs
+curl -s "http://localhost:8081/api/v1/stream/devices?capabilities=true&read_test=true" | python3 -m json.tool
+ls -l /dev/video* ; v4l2-ctl --list-devices                            # what the kernel actually sees
+ls /media/$USER/                                                       # the camera's SD card (volume name = its UUID)
+```
+
+`deploy/flir-collector.service` is a **template**: `setup_pi.sh --install-service` substitutes the
+service user, repository path, virtualenv name, port and mount, then runs `systemd-analyze verify`
+before enabling it. Installing it by hand means replacing those fields first (or running
+`--install-service --dry-run` and copying the unit it prints) - copying the file unchanged would
+hand the placeholders to systemd verbatim.
 
 ---
 
@@ -175,7 +232,7 @@ never re-delivered in a loop.
 
 | Route | Purpose |
 |---|---|
-| `GET /api/v1/stream/devices` | Active MJPEG binding, available OpenCV backends, and (with `?probe=true`) every capture index that opens. |
+| `GET /api/v1/stream/devices` | Active MJPEG binding, available OpenCV backends, and (with `?probe=true`) every capture index that opens. `?capabilities=true` adds the UVC capability probe (negotiated fourcc, USB interface class, advertised pixel formats, control list and a Scenario A/B verdict); `?read_test=true` also reads one frame per index **in a child process** to catch a metadata node that opens but never streams, and `?max_index=N` / `?budget_seconds=N` bound how far and how long the sweep may run. An identical repeat inside a few seconds is answered from the previous result (`cached: true`) unless `?fresh=true`. |
 | `GET /api/v1/stream/live-mjpeg` | `multipart/x-mixed-replace` MJPEG at the E8-XT's 9 Hz. `?index=N` / `?backend=dshow\|v4l2` bind a device explicitly, `?frames=N` caps the stream for diagnostics, and HTTP 503 is returned when nothing opens. |
 | `POST /api/v1/camera/trigger-snapshot` | Coordinates a capture, waits (bounded) for a new file to appear and returns the newest radiometric frame. Runs `FLIR_TRIGGER_CMD` when configured, reports `trigger: hardware \| software`, and never touches USB power or sysfs. |
 
@@ -186,6 +243,53 @@ never re-delivered in a loop.
 > video), and the shutter/NUC cannot be commanded over mass storage. `webapp/live.html` therefore
 > reports exactly which device a stream is bound to and offers **radiometric polling** of
 > `/api/v1/thermal-frame` as a hardware-free thermal feed.
+
+> **Is the camera actually UVC?** The note above is the project's expectation, not a measurement,
+> so the collector can check it on the host instead: `GET /api/v1/stream/devices?capabilities=true`
+> (the **UVC CAPABILITY PROBE** button on `live.html`) reports, per capture index, the fourcc OpenCV
+> negotiated, the USB interface class behind `/dev/videoN` (`0e` == Video Class), every pixel format
+> `v4l2-ctl` advertises, and the control list — a vendor-named control section is where UVC
+> extension-unit (XU) commands such as shutter / FFC live. Verdicts are blunt on purpose:
+> `no-capture-device` (mass-storage-only camera, exactly as expected here),
+> `scenario-a-8-bit-viewfinder` (a real live picture with no temperature meaning),
+> `scenario-b-radiometric-y16` (16-bit detector counts — still **no** Planck constants in the
+> stream), `metadata-nodes-only` (opens, never streams) and `capture-device-unclassified`
+> (format not reported). The same evidence by hand on the Pi:
+> `lsusb -v -d <vid:pid> | grep bInterfaceClass` (look for `0e`), `dmesg | grep -i uvcvideo`,
+> `v4l2-ctl --list-devices`, `v4l2-ctl -d /dev/video0 --list-formats-ext`, `v4l2-ctl -d /dev/video0 -l`.
+> Install `v4l-utils` (`sudo apt install v4l-utils`) — without it the format list is unavailable, and
+> add `?read_test=true` when a metadata node is suspected, because it opens happily and then never
+> delivers a frame (which is what would otherwise stop the MJPEG route mid-stream).
+>
+> Every probe is bounded in the way each part can actually be bounded. The **frame-read test**
+> (`?read_test=true`) runs in a **child process**, so `subprocess` kills it on timeout: an OpenCV
+> capture cannot be interrupted from inside the interpreter, and abandoning one in-process was
+> tried here — the blocked call still owned the capture, which wedged the collector and then took
+> the whole process down under DirectShow. The child also means a crashing camera backend cannot
+> reach the API, and a timeout reports `ok: null` ("no evidence") rather than a failed device. The
+> **sweep** gets a 20 s budget (`?budget_seconds=N`) which is deliberately *soft*: it stops starting
+> new work, but an index already being inspected cannot be interrupted — `scanTruncated` says
+> plainly when the scan stopped early rather than implying that no device exists. Probing is also
+> the only route here that touches the devices, so an identical repeat within 10 s is answered from
+> the previous result (`cached: true`) unless `?fresh=true`: on a Windows workstation the *third*
+> consecutive probe of the same host stopped answering entirely, with no read test involved, which
+> is exactly what a double-clicked button would have caused. (Opening `/dev/videoN` on the Pi is
+> cheap and does not show this behaviour.)
+>
+> An operating system can also refuse a camera to a desktop app **without failing the open**: the
+> capture is created and the read simply never returns, so a blocked camera looks exactly like
+> wedged hardware. Every probe therefore reports the host's own camera-access policy as well
+> (`hostCameraAccess`: the Windows *desktop apps* consent value, the per-user toggle and the
+> machine-wide one). When the policy is `Deny`, the summary says so and the timed-out read test is
+> labelled as that refusal instead of implying a faulty device; clear it in
+> `Settings → Privacy & security → Camera → Let desktop apps access your camera`, then re-probe
+> with `?fresh=true`. Reading the policy touches no device, costs nothing, and cannot wedge
+> anything.
+>
+> `?probe=true` (the older `PROBE DEVICES` button) is deliberately unchanged: it opens every index
+> **in-process**, and an OpenCV open cannot be interrupted - so on a host that blocks or wedges a
+> camera that request can hang. Use `?capabilities=true` on such a host; the bounded probe is the
+> one to trust.
 
 ---
 

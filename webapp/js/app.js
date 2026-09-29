@@ -329,7 +329,11 @@ function ingestLastN() {
   }
 
   const input = document.getElementById("cfgIngestCount");
-  const limit = Math.max(1, Math.min(999, parseInt(input ? input.value : "", 10) || 0));
+  // Distinguish "no usable number" from a valid count before clamping: the clamp
+  // floors at 1, so an empty or non-numeric field would otherwise silently ingest
+  // the newest shot instead of reaching the guard below.
+  const typed = parseInt(input ? input.value : "", 10);
+  const limit = Number.isFinite(typed) ? Math.max(1, Math.min(999, typed)) : 0;
   if (!limit) {
     alert("Enter how many of the most recent shots to ingest (1 - 999).");
     return;

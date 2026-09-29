@@ -7,6 +7,10 @@
 //                     itself is not UVC, so this is only meaningful with a real video source.
 //   * "radiometric" - polls /api/v1/thermal-frame at 9 Hz and paints the genuine
 //                     Planck-calibrated matrix to a canvas: a hardware-free thermal feed.
+//
+// The UVC capability probe below reports, per capture index, whether a USB Video Class
+// interface actually exists and whether a stream is 16-bit radiometric or 8-bit viewfinder,
+// so those assumptions are checked on the host instead of trusted.
 
 const LIVE_TARGET_FPS = 9;
 const LIVE_POLL_INTERVAL_MS = Math.round(1000 / LIVE_TARGET_FPS);   // ~111 ms
@@ -23,6 +27,7 @@ let livePollTimer = null;
 let liveLastMtime = 0;
 let liveConsecutiveErrors = 0;
 let liveOffscreen = null;
+let liveLastProbeCached = false;   // drives the "fresh" flag on the next capability probe
 
 function liveBaseApi() {
   const input = document.getElementById('liveApiUrl');
@@ -369,6 +374,197 @@ async function probeStreamDevices() {
   } catch (err) {
     setLiveState(liveActive ? `streaming (${liveMode})` : 'idle');
     logLive(`Device probe failed: ${err.message}`, 'error');
+  }
+}
+
+// --- UVC CAPABILITY PROBE ---
+// Answers "is this camera UVC, and what does the stream carry?" from the collector host's own
+// evidence: negotiated fourcc, USB interface class, advertised pixel formats and controls.
+const LIVE_PIXEL_CLASS_LABEL = {
+  'radiometric-16-bit': { text: 'RADIOMETRIC 16-bit', cls: 'text-emerald-400' },
+  '8-bit-viewfinder': { text: '8-bit viewfinder', cls: 'text-amber-400' },
+  'metadata-only': { text: 'metadata node', cls: 'text-slate-400' },
+  unknown: { text: 'format unknown', cls: 'text-slate-500' }
+};
+
+const LIVE_VERDICT_LABEL = {
+  'scenario-b-radiometric-y16': { title: 'SCENARIO B - 16-BIT RADIOMETRIC FORMATS', cls: 'text-emerald-400', level: 'ok' },
+  'scenario-a-8-bit-viewfinder': { title: 'SCENARIO A - 8-BIT VIEWFINDER ONLY', cls: 'text-amber-400', level: 'warn' },
+  'metadata-nodes-only': { title: 'METADATA NODES ONLY - NO IMAGE STREAM', cls: 'text-amber-400', level: 'warn' },
+  'no-capture-device': { title: 'NO VIDEO CAPTURE DEVICE ON THIS HOST', cls: 'text-slate-300', level: 'warn' },
+  'capture-device-unclassified': { title: 'CAPTURE DEVICE - FORMAT NOT REPORTED', cls: 'text-slate-300', level: 'info' }
+};
+
+// Device names and control names come from USB descriptors and kernel drivers, so they are
+// escaped before they reach innerHTML.
+function escapeLiveValue(value) {
+  return String(value === undefined || value === null ? '' : value)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+/** Pixel-class badge; unrecognised formats stay "unknown" instead of being guessed at. */
+function livePixelClassMarkup(pixelClass) {
+  const known = LIVE_PIXEL_CLASS_LABEL[pixelClass] || LIVE_PIXEL_CLASS_LABEL.unknown;
+  return `<span class="${known.cls}">${known.text}</span>`;
+}
+
+/** Renders a capability-probe payload. Pure (no DOM access), so it can be verified directly. */
+function buildLiveCapabilitiesHtml(payload) {
+  const caps = payload && payload.capabilities;
+  if (!caps) {
+    return `<div class="text-amber-400">This collector answered without a capability block - restart it with the ` +
+      `updated <span class="text-slate-300">live_stream_driver.py</span>.</div>`;
+  }
+
+  const summary = caps.summary || {};
+  const verdict = LIVE_VERDICT_LABEL[summary.verdict] ||
+    { title: String(summary.verdict || 'unknown verdict'), cls: 'text-slate-300' };
+  const devices = caps.devices || [];
+
+  const rows = devices.map(device => {
+    const sysfs = device.sysfs || {};
+    const v4l2 = device.v4l2 || {};
+    const frameTest = device.frameTest || {};
+
+    const usb = sysfs.idVendor
+      ? `${escapeLiveValue(sysfs.idVendor)}:${escapeLiveValue(sysfs.idProduct)} ${escapeLiveValue(sysfs.manufacturer || sysfs.product || '')}`
+      : 'no sysfs entry';
+    const interfaceClass = sysfs.bInterfaceClass
+      ? `${escapeLiveValue(sysfs.bInterfaceClass)} ${escapeLiveValue(sysfs.bInterfaceClassName)} / sub ` +
+        `${escapeLiveValue(sysfs.bInterfaceSubClass)} ${escapeLiveValue(sysfs.bInterfaceSubClassName)}`
+      : 'unknown';
+
+    const formats = (v4l2.formats || []).map(format =>
+      `<div class="pl-2">${escapeLiveValue(format.fourcc || '?')} &mdash; ${escapeLiveValue(format.description || 'no description')} ` +
+      `[${livePixelClassMarkup(format.pixelClass)}]${format.sizes && format.sizes.length ? ' ' + escapeLiveValue(format.sizes.join(', ')) : ''}` +
+      `${format.frameRates && format.frameRates.length ? ' @ ' + escapeLiveValue(format.frameRates.join(', ')) + ' fps' : ''}</div>`
+    ).join('') || `<div class="pl-2 text-slate-500">${escapeLiveValue(v4l2.reason || (v4l2.errors && v4l2.errors[0]) || 'no formats reported')}</div>`;
+
+    const xu = (((v4l2.controls || {}).xuCandidates) || []).map(control =>
+      `<div class="pl-2 text-cyan-300">${escapeLiveValue(control.name)} ` +
+      `<span class="text-slate-500">${escapeLiveValue(control.id)} ${escapeLiveValue(control.detail)}</span></div>`
+    ).join('');
+
+    const frameLine = frameTest.tested
+      ? (frameTest.ok === true
+        ? `<span class="text-emerald-400">frame received</span> ${escapeLiveValue((frameTest.shape || []).join('x'))} ${escapeLiveValue(frameTest.dtype)}`
+        : (frameTest.ok === false
+          ? `<span class="text-rose-400">no frame</span> ${escapeLiveValue(frameTest.reason)}`
+          : `<span class="text-amber-400">no verdict</span> ${escapeLiveValue(frameTest.reason)}`))
+      : `<span class="text-slate-500">not tested</span> ${escapeLiveValue(frameTest.reason)}`;
+
+    return `
+      <div class="pt-2 border-t border-slate-800">
+        <div class="text-slate-200">index ${escapeLiveValue(device.index)} via ${escapeLiveValue(device.backend)}${device.node ? ' &mdash; ' + escapeLiveValue(device.node) : ''}${device.opened === false ? ' <span class="text-rose-400">did not open</span>' : ''}</div>
+        <div>Format: ${device.fourcc ? escapeLiveValue(device.fourcc) : '<span class="text-slate-500">not reported</span>'} ${livePixelClassMarkup(device.pixelClass)}${device.width ? ' &middot; ' + escapeLiveValue(device.width + ' x ' + device.height) : ''}${device.fps ? ' @ ' + escapeLiveValue(device.fps) + ' fps' : ''}</div>
+        <div>Frame test: ${frameLine}</div>
+        <div>USB: ${usb}</div>
+        <div>Interface class: ${interfaceClass}</div>
+        <div>Advertised formats:${formats}</div>
+        ${v4l2.captureType ? `<div>Capture type: ${escapeLiveValue(v4l2.captureType)}${v4l2.isMetadataNode ? ' <span class="text-amber-400">(metadata node: opens, never streams)</span>' : ''}</div>` : ''}
+        ${xu ? `<div>XU / vendor control candidates:${xu}</div>` : ''}
+        ${frameTest.rawDepthHint ? `<div class="text-emerald-400">${escapeLiveValue(frameTest.rawDepthHint)}</div>` : ''}
+      </div>`;
+  }).join('');
+
+  const notes = (summary.notes || [])
+    .map(note => `<div class="pl-2 text-slate-500">- ${escapeLiveValue(note)}</div>`)
+    .join('');
+
+  // The host's own camera policy: a denied policy and a wedged device produce the same evidence,
+  // and this is the only line that can tell the operator which one they are looking at.
+  const access = caps.hostCameraAccess || {};
+  const accessLine = access.checked
+    ? (access.blocked
+      ? `<span class="text-rose-400">host camera access: denied</span> ` +
+        `<span class="text-slate-500">(desktop apps ${escapeLiveValue(access.desktopApps || 'unknown')} &middot; user ${escapeLiveValue(access.userConsent || 'unset')} &middot; machine ${escapeLiveValue(access.machineConsent || 'unset')} &mdash; grant access in Windows privacy settings before blaming the device)</span>`
+      : `<span class="text-emerald-400">host camera access: allowed</span> ` +
+        `<span class="text-slate-500">(desktop apps ${escapeLiveValue(access.desktopApps || 'unset')})</span>`)
+    : `<span class="text-slate-500">host camera access: not checked${access.note ? ' &mdash; ' + escapeLiveValue(access.note) : ''}</span>`;
+
+  return `
+    <div class="${verdict.cls} font-bold">${escapeLiveValue(verdict.title)}</div>
+    <div class="text-slate-300 pt-1">${escapeLiveValue(summary.meaning || '')}</div>
+    <div class="pt-1 text-slate-500">UVC interface present: ${summary.uvcInterfacePresent ? 'yes' : 'no'} &middot; capture devices: ${escapeLiveValue(summary.captureDeviceCount)} &middot; metadata nodes: ${escapeLiveValue(summary.metadataNodeCount)}</div>
+    ${caps.hostCameraAccess ? `<div>${accessLine}</div>` : ''}
+    <div class="text-slate-500">platform ${escapeLiveValue(caps.platform)} &middot; v4l2-ctl: ${caps.v4l2Tool ? escapeLiveValue(caps.v4l2Tool) : 'not available'} &middot; read test: ${caps.readTest ? 'on' : 'off'} &middot; scanned ${escapeLiveValue(caps.probeLimit)} index(es) in ${escapeLiveValue(caps.scanSeconds)}s${caps.scanTruncated ? ' <span class="text-amber-400">(scan stopped at the time budget)</span>' : ''}${caps.cached ? ' <span class="text-slate-400">(cached, ' + escapeLiveValue(caps.cacheAgeSeconds) + 's old - press again for a fresh sweep)</span>' : ''}</div>
+    ${rows || '<div class="pt-2 text-slate-500">No capture index opened on the collector host.</div>'}
+    ${notes ? `<div class="pt-2 border-t border-slate-800">${notes}</div>` : ''}`;
+}
+
+/**
+ * Asks the collector host what video interfaces exist and what they carry, then reports the
+ * verdict in the panel, the log and the telemetry state. Nothing here changes the source
+ * mode: a probe is evidence, so the operator decides what to do with it.
+ */
+async function probeStreamCapabilities() {
+  const panel = document.getElementById('liveCapabilities');
+  const readTestEl = document.getElementById('liveReadTest');
+  const readTest = !!(readTestEl && readTestEl.checked);
+  // A second click is an explicit request for a new measurement, so it bypasses the collector's
+  // re-probe guard: probing is the one action here that can disturb the device stack.
+  const fresh = liveLastProbeCached ? 'true' : 'false';
+
+  setLiveState('probing capabilities');
+  if (panel) panel.innerText = 'Probing capture interfaces\u2026';
+
+  try {
+    const url = `${liveBaseApi()}/api/v1/stream/devices?probe=true&capabilities=true` +
+      `&read_test=${readTest}&fresh=${fresh}`;
+    const res = await fetch(url);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const payload = await res.json();
+
+    if (panel) panel.innerHTML = buildLiveCapabilitiesHtml(payload);
+
+    if (!payload.capabilities) {
+      logLive('Collector answered without a capability block - restart it with the updated ' +
+        'edge_collector/live_stream_driver.py.', 'warn');
+      setLiveState(liveActive ? `streaming (${liveMode})` : 'idle');
+      return;
+    }
+
+    const caps = payload.capabilities;
+    const summary = caps.summary || {};
+    const devices = caps.devices || [];
+    const verdict = LIVE_VERDICT_LABEL[summary.verdict];
+    liveLastProbeCached = !!caps.cached;
+
+    logLive(`Capability probe: ${verdict ? verdict.title : summary.verdict} ` +
+      `(${devices.length} index(es) open in ${caps.scanSeconds}s, read test ${readTest ? 'on' : 'off'}` +
+      `${caps.cached ? `, served from the ${escapeLiveValue(caps.cacheAgeSeconds)}s-old result` : ''})`,
+      verdict ? verdict.level : 'info');
+    if (caps.scanTruncated) {
+      logLive('The scan stopped at its time budget before every index was inspected; use the ' +
+        'Video Index field or ?max_index=N to look at one explicitly.', 'warn');
+    }
+
+    devices.forEach(device => {
+      const frame = device.frameTest && device.frameTest.tested
+        ? (device.frameTest.ok ? ' - frame received' : ' - no frame')
+        : '';
+      logLive(`index ${device.index} via ${device.backend}: ${device.fourcc || 'no fourcc'} / ` +
+        `${device.pixelClass}${device.node ? ' on ' + device.node : ''}${frame}`);
+    });
+    (summary.notes || []).forEach(note => logLive(note, 'info'));
+
+    if (summary.uvcInterfacePresent === false && devices.length) {
+      logLive('No USB Video Class interface (bInterfaceClass 0x0e) behind the open nodes, so ' +
+        'the collector\'s "not UVC" note holds for this host.', 'ok');
+    } else if (summary.uvcInterfacePresent) {
+      logLive('A USB Video Class interface is present - the "not UVC" note in the collector and ' +
+        'README needs revisiting for this hardware.', 'warn');
+    }
+    setLiveState(liveActive ? `streaming (${liveMode})` : 'idle');
+  } catch (err) {
+    setLiveState(liveActive ? `streaming (${liveMode})` : 'idle');
+    if (panel) panel.innerHTML = `<span class="text-rose-400">Capability probe failed: ` +
+      `${escapeLiveValue(err.message)}</span>`;
+    logLive(`Capability probe failed: ${err.message}`, 'error');
   }
 }
 
