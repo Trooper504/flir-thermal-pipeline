@@ -25,11 +25,14 @@ flir-thermal-pipeline/
     ├── index.html        # Workbench: ingestion, thermograms, reports
     ├── live.html         # Live Video & Acquisition Studio
     ├── micro_inspector.html # Sub-millimetre Particle & Thermal Dynamics Studio
+    ├── mask_studio.html   # Global polygonal mask: draw once, measure every stored frame
     └── js/
         ├── app.js        # DOM controls, IndexedDB storage, Plotly renderers, and report exporters
         ├── thermalEngine.js # Radiometric math, FLIR CSV parser, signed convolution, isotherm masking
         ├── microEngine.js   # Percentile clipping, ROI slicing, MAD statistics, flux/divergence fields
         ├── microApp.js      # Micro Inspector UI, 4-camera Plotly grid, CSV/JSON exporters
+        ├── maskEngine.js    # SVG-path parsing, ray-cast polygon raster, masked stats, batch exporters
+        ├── maskApp.js       # Mask Studio UI: freehand capture, cookie-cutter preview, batch scheduler
         ├── liveApp.js       # Live studio controller (MJPEG + radiometric polling modes)
         └── gifEngine.js     # Dual two-pass scale locking and animated GIF compiler
 ```
@@ -43,6 +46,7 @@ flir-thermal-pipeline/
 * **Click-to-Pick Differential Points:** `Pick P1` / `Pick P2` arm the 2D thermogram; a click writes the pixel coordinates straight into the `pt1X/pt1Y/pt2X/pt2Y` inputs (auto-advancing P1 → P2 → P1 for two-click pairing), draws cyan/amber markers plus a P1 → P2 guide line through `Plotly.relayout`, and stays synchronized with manual typing (which clamps to the frame bounds).
 * **Micro Inspector Studio (`micro_inspector.html`):** unblurred (`zsmooth: false`) thermograms with percentile-clipped contrast, arbitrary center-anchored ROIs ($2\times3$, $4\times5$, $20\times20$, rectangle or ellipse, plus free-hand drawing through Plotly's draw tools), MAD/robust-σ micro statistics, sub-pixel thermal centroid, aspect-matched 3D micro-topography (linear or shifted-log), $-\nabla T$ flux quivers with magnitude-scaled opacity, and $\nabla\cdot\vec q$ source/sink divergence with dual CSV/JSON export.
 * **Live Studio (`live.html`):** MJPEG viewfinder mode plus a hardware-free *radiometric polling* mode that paints genuine Planck-calibrated frames at 9 Hz, with an OSD crosshair, measured FPS, resolution telemetry and a snapshot hand-off that links straight into the workbench or the Micro Inspector.
+* **Mask Studio (`mask_studio.html`):** *global polygonal masking* — draw one closed lasso on a thermogram (`dragmode: 'drawclosedpath'`), the SVG path is parsed to whole-pixel vertices, ray-cast **once** into a reusable bounding-box boolean mask (`window.globalROI`), and that cookie-cutter is then applied to every frame in the ingestion queue. Masked-only min/max/mean/median/MAD/robust-σ statistics, a transparent cookie-cutter preview, and an async batch sweep (`await setTimeout(0)` per frame, cancellable progress bar) that exports a time-series CSV plus an optional JSON report with the embedded mask bitstrings.
 * **Signed 3x3 Spatial Thermal Gradient:** Calculates local pixel temperature deviation ($T_{\text{center}} - \bar{T}_{\text{neighbors}}$) with symmetric dynamic scaling centered at $0.0\text{ °C}$.
 * **3D Thermal Topography Surface:** Renders radiometric matrices as interactive 3D surface plots with projected isothermal contour lines.
 * **Differential Point Inspection:** Real-time point-to-point temperature delta calculation ($\Delta T_{1-2} = |T(P_1) - T(P_2)|$).
@@ -81,8 +85,9 @@ HTML pages, so the browser must be pointed at the Pi rather than at itself:
   API-backed page reuses it.
 * CORS is open on the collector (`allow_origins=["*"]`, origin reflected), so the pages work
   whether served from a local web server **or opened directly from disk** (`file://`).
-* The **Micro Inspector is entirely client-side** (IndexedDB / CSV / demo data), so it needs no
-  collector connection at all.
+* The **Micro Inspector and Mask Studio are entirely client-side** (IndexedDB / CSV / demo data), so
+  they need no collector connection at all. Mask Studio reads the same `frames` store, so an album
+  ingested in the Workbench is immediately available for a batch mask sweep.
 * **Pi prerequisites for the live viewfinder:** the E8-XT enumerates as USB mass storage, not as
   a camera, so MJPEG mode requires a real video device on the Pi
   (`ls /dev/video*` — e.g. a USB capture dongle wired to the camera's video output). Without one,
@@ -129,6 +134,10 @@ Serve the `webapp/` directory on port 8000:
 python3 -m http.server 8000 -d webapp
 ```
 Then open `http://localhost:8000/` in your browser.
+
+The static client ships four pages: `index.html` (workbench), `live.html` (viewfinder / trigger),
+`micro_inspector.html` (patch-level dynamics) and `mask_studio.html` (global polygonal ROI + batch
+time series). All four are linked from each other's navigation bar.
 
 #### Option B — Direct File Access
 Simply double-click or open `webapp/index.html` directly in any web browser.
