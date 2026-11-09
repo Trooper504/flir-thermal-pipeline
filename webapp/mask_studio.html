@@ -1,0 +1,244 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>FLIR Mask Studio &mdash; Global Polygonal ROI &amp; Batch Time Series</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdn.plot.ly/plotly-2.27.0.min.js"></script>
+</head>
+<body class="bg-slate-950 text-slate-100 font-sans p-5 min-h-screen">
+  <!-- NAVIGATION -->
+  <header class="flex flex-wrap justify-between items-center gap-3 mb-4">
+    <div>
+      <h1 class="text-xl font-bold tracking-wide">FLIR Mask Studio</h1>
+      <p class="text-xs text-slate-400 font-mono">Global Polygonal Masking &mdash; draw once, measure every frame</p>
+    </div>
+    <nav class="flex items-center gap-2 text-xs font-mono">
+      <a href="index.html" class="px-3 py-1.5 rounded border border-slate-700 bg-slate-900 hover:bg-slate-800 text-slate-300 transition">&larr; Workbench (album / streams)</a>
+      <a href="live.html" class="px-3 py-1.5 rounded border border-emerald-800 bg-slate-900 hover:bg-emerald-900/40 text-emerald-400 transition">Live Video &amp; Trigger Studio</a>
+      <a href="micro_inspector.html" class="px-3 py-1.5 rounded border border-cyan-800 bg-slate-900 hover:bg-cyan-900/40 text-cyan-400 transition">Micro Inspector</a>
+    </nav>
+  </header>
+
+  <!-- 1. SOURCE FRAMES & MASK CAPTURE -->
+  <details class="group bg-slate-900 border border-slate-800 rounded-lg overflow-hidden mb-4" open>
+    <summary class="p-4 cursor-pointer select-none bg-slate-900 hover:bg-slate-800/60 transition text-xs font-bold uppercase tracking-wider text-slate-300 font-mono">
+      1. Frame Source &amp; Freehand Mask Capture
+    </summary>
+    <div class="p-4 space-y-4 border-t border-slate-800">
+      <div class="grid grid-cols-1 md:grid-cols-4 gap-3 text-xs font-mono">
+        <div class="md:col-span-2">
+          <label class="block text-slate-400 mb-1">Active Frame</label>
+          <select id="maskFrameSelect" onchange="handleMaskFrameChange(event)"
+                  class="w-full bg-slate-950 border border-slate-700 rounded px-2 py-1.5 text-slate-200 focus:outline-none focus:border-slate-500">
+          </select>
+        </div>
+        <div>
+          <label class="block text-slate-400 mb-1">Colour Palette</label>
+          <select id="maskPalette" onchange="recomputeMaskAnalysis()"
+                  class="w-full bg-slate-950 border border-slate-700 rounded px-2 py-1.5 text-slate-200 focus:outline-none focus:border-slate-500">
+            <option value="YlOrRd" selected>Ironbow / YlOrRd</option>
+            <option value="Jet">Jet</option>
+            <option value="Greys">Greys</option>
+            <option value="Viridis">Viridis</option>
+            <option value="Coolwarm">Coolwarm</option>
+          </select>
+        </div>
+        <div>
+          <label class="block text-slate-400 mb-1">Import FLIR CSV Frames</label>
+          <input id="maskCsvFiles" type="file" accept=".csv,text/csv" multiple onchange="handleMaskCsvUpload(event)"
+                 class="w-full text-[11px] text-slate-400 file:mr-2 file:px-2 file:py-1 file:rounded file:border-0 file:bg-slate-800 file:text-slate-200 hover:file:bg-slate-700">
+        </div>
+      </div>
+
+      <div class="flex flex-wrap items-center gap-3">
+        <button id="maskDrawModeBtn" type="button" onclick="toggleMaskDrawMode()"
+                class="px-3 py-1.5 rounded border border-fuchsia-700 bg-fuchsia-900/40 hover:bg-fuchsia-800/50 text-fuchsia-200 text-xs font-mono transition">
+          MASK MODE: ON - drag to lasso
+        </button>
+        <button type="button" onclick="clearMaskRoi()"
+                class="px-3 py-1.5 rounded border border-slate-700 bg-slate-800 hover:bg-slate-700 text-xs font-mono">
+          CLEAR MASK
+        </button>
+        <button type="button" onclick="loadMaskDemoSequence()"
+                class="px-3 py-1.5 rounded border border-slate-700 bg-slate-800 hover:bg-slate-700 text-xs font-mono">
+          LOAD 12 DEMO FRAMES
+        </button>
+        <span class="px-2 py-1 rounded bg-slate-950 border border-slate-800 text-[11px] font-mono text-slate-400">
+          <span id="maskActiveFrame">--</span>
+        </span>
+      </div>
+
+      <p id="maskDrawHint" class="text-[11px] text-slate-500 font-mono">
+        Draw mode active: click-drag a closed lasso on the left thermogram (or use the rectangle tool). Panning is disabled.
+      </p>
+      <p class="text-[11px] text-slate-500 font-mono">
+        The polygon is rasterised <em>once</em> into a boolean mask; every frame afterwards is measured with that same
+        cookie-cutter, so a 78-capture sweep costs one ray-cast and N cheap extractions.
+      </p>
+      <p id="maskStatus" class="text-[11px] text-fuchsia-400 font-mono">
+        Booting&hellip;
+      </p>
+    </div>
+  </details>
+  <!-- 2. MASK GEOMETRY (THE REUSABLE BOOLEAN COOKIE-CUTTER) -->
+  <details class="group bg-slate-900 border border-slate-800 rounded-lg overflow-hidden mb-4" open>
+    <summary class="p-4 cursor-pointer select-none bg-slate-900 hover:bg-slate-800/60 transition text-xs font-bold uppercase tracking-wider text-slate-300 font-mono">
+      2. Parsed Polygon, Bounding Box &amp; Mask Raster
+    </summary>
+    <div class="p-4 space-y-3 border-t border-slate-800 text-xs font-mono">
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-2.5">
+        <div class="md:col-span-2 bg-slate-950 border border-slate-800 rounded p-2.5">
+          <span class="text-slate-500">Global mask</span>
+          <div id="maskRoiLabel" class="text-slate-200 font-bold mt-1">--</div>
+        </div>
+        <div class="bg-slate-950 border border-slate-800 rounded p-2.5 flex justify-between gap-3">
+          <span class="text-slate-500">Bounding box</span><span id="maskBbox" class="text-slate-200 font-bold text-right">--</span>
+        </div>
+        <div class="bg-slate-950 border border-slate-800 rounded p-2.5 flex justify-between gap-3">
+          <span class="text-slate-500">Mask pixels (inside)</span><span id="maskPixelCount" class="text-fuchsia-300 font-bold">--</span>
+        </div>
+        <div class="bg-slate-950 border border-slate-800 rounded p-2.5 flex justify-between gap-3">
+          <span class="text-slate-500">Coverage</span><span id="maskCoverage" class="text-slate-200 font-bold text-right">--</span>
+        </div>
+        <div class="bg-slate-950 border border-slate-800 rounded p-2.5 flex justify-between gap-3">
+          <span class="text-slate-500">Coordinate space</span><span id="maskCoordinateSpace" class="text-slate-300 font-bold text-right">--</span>
+        </div>
+      </div>
+      <p class="text-[11px] text-slate-500">
+        Vertices are rounded to whole pixels and the mask is indexed <span class="text-slate-300">mask[y - y0][x - x0]</span>;
+        row = Y, column = X. Ray casting uses the half-open vertex rule, so a scanline that grazes a vertex is never counted twice.
+      </p>
+    </div>
+  </details>
+
+  <!-- 3. MASKED STATISTICS FOR THE ACTIVE FRAME -->
+  <details class="group bg-slate-900 border border-slate-800 rounded-lg overflow-hidden mb-4" open>
+    <summary class="p-4 cursor-pointer select-none bg-slate-900 hover:bg-slate-800/60 transition text-xs font-bold uppercase tracking-wider text-slate-300 font-mono">
+      3. Masked Statistics (active frame only &mdash; no full-frame parsing)
+    </summary>
+    <div class="p-4 space-y-3 border-t border-slate-800">
+      <div class="grid grid-cols-2 md:grid-cols-4 gap-2.5 text-xs font-mono">
+        <div class="bg-slate-950 border border-rose-900/60 rounded p-2.5 flex justify-between">
+          <span class="text-slate-500">T max</span><span id="maskStatMax" class="text-rose-400 font-bold">--</span>
+        </div>
+        <div class="bg-slate-950 border border-sky-900/60 rounded p-2.5 flex justify-between">
+          <span class="text-slate-500">T min</span><span id="maskStatMin" class="text-sky-400 font-bold">--</span>
+        </div>
+        <div class="bg-slate-950 border border-slate-800 rounded p-2.5 flex justify-between">
+          <span class="text-slate-500">T mean</span><span id="maskStatMean" class="text-slate-200 font-bold">--</span>
+        </div>
+        <div class="bg-slate-950 border border-slate-800 rounded p-2.5 flex justify-between">
+          <span class="text-slate-500">T median</span><span id="maskStatMedian" class="text-slate-200 font-bold">--</span>
+        </div>
+        <div class="bg-slate-950 border border-slate-800 rounded p-2.5 flex justify-between">
+          <span class="text-slate-500">MAD</span><span id="maskStatMad" class="text-amber-300 font-bold">--</span>
+        </div>
+        <div class="bg-slate-950 border border-slate-800 rounded p-2.5 flex justify-between">
+          <span class="text-slate-500">Robust &sigma; (1.4826&middot;MAD)</span><span id="maskStatRobustStd" class="text-amber-300 font-bold">--</span>
+        </div>
+        <div class="bg-slate-950 border border-slate-800 rounded p-2.5 flex justify-between">
+          <span class="text-slate-500">Std dev</span><span id="maskStatSigma" class="text-slate-200 font-bold">--</span>
+        </div>
+        <div class="bg-slate-950 border border-slate-800 rounded p-2.5 flex justify-between">
+          <span class="text-slate-500">&Delta;T (max &minus; min)</span><span id="maskStatDeltaT" class="text-slate-200 font-bold">--</span>
+        </div>
+        <div class="bg-slate-950 border border-slate-800 rounded p-2.5 flex justify-between">
+          <span class="text-slate-500">Values used</span><span id="maskStatPixelCount" class="text-slate-200 font-bold">--</span>
+        </div>
+        <div class="bg-slate-950 border border-slate-800 rounded p-2.5 md:col-span-3 flex justify-between gap-3">
+          <span class="text-slate-500">Display clipping (masked pixels)</span><span id="maskClipInfo" class="text-slate-200 font-bold text-right">--</span>
+        </div>
+      </div>
+    </div>
+  </details>
+
+  <!-- 4. BATCH AUTOMATION ACROSS THE WHOLE INGESTION QUEUE -->
+  <details class="group bg-slate-900 border border-slate-800 rounded-lg overflow-hidden mb-4" open>
+    <summary class="p-4 cursor-pointer select-none bg-slate-900 hover:bg-slate-800/60 transition text-xs font-bold uppercase tracking-wider text-slate-300 font-mono">
+      4. Batch ROI Sweep &amp; Time-Series Export
+    </summary>
+    <div class="p-4 space-y-3 border-t border-slate-800">
+      <div class="flex flex-wrap items-center gap-3">
+        <button type="button" onclick="runMaskBatch()"
+                class="px-3 py-1.5 rounded border border-fuchsia-700 bg-fuchsia-900/40 hover:bg-fuchsia-800/50 text-fuchsia-200 text-xs font-mono transition">
+          RUN BATCH ROI SWEEP
+        </button>
+        <button type="button" onclick="cancelMaskBatch()"
+                class="px-3 py-1.5 rounded border border-slate-700 bg-slate-800 hover:bg-slate-700 text-xs font-mono">
+          CANCEL
+        </button>
+        <button type="button" onclick="exportMaskBatchCsv()"
+                class="px-3 py-1.5 rounded border border-slate-700 bg-slate-800 hover:bg-slate-700 text-xs font-mono">
+          EXPORT TIME-SERIES CSV
+        </button>
+        <button type="button" onclick="exportMaskJson()"
+                class="px-3 py-1.5 rounded border border-slate-700 bg-slate-800 hover:bg-slate-700 text-xs font-mono">
+          EXPORT JSON REPORT
+        </button>
+        <label class="flex items-center gap-2 text-[11px] font-mono text-slate-400">
+          <input id="maskIncludeMask" type="checkbox" class="accent-fuchsia-500">
+          embed boolean mask rows in JSON
+        </label>
+      </div>
+
+      <div class="space-y-1">
+        <div class="w-full h-2 bg-slate-950 border border-slate-800 rounded overflow-hidden">
+          <div id="maskProgressBar" class="h-full bg-fuchsia-600 transition-all duration-150" style="width:0%"></div>
+        </div>
+        <div class="flex justify-between text-[11px] font-mono text-slate-500">
+          <span id="maskProgressLabel">0 / 0 frame(s) - 0%</span>
+          <span id="maskBatchCount">0 rows</span>
+        </div>
+      </div>
+
+      <div class="overflow-x-auto bg-slate-950 border border-slate-800 rounded">
+        <table class="min-w-full text-[11px] font-mono">
+          <thead class="text-slate-500 uppercase tracking-wider">
+            <tr>
+              <th class="text-left py-1.5 pr-2 font-normal">#</th>
+              <th class="text-left py-1.5 pr-2 font-normal">Frame</th>
+              <th class="text-left py-1.5 pr-2 font-normal">Status</th>
+              <th class="text-right py-1.5 pr-2 font-normal">T max</th>
+              <th class="text-right py-1.5 pr-2 font-normal">T mean</th>
+              <th class="text-right py-1.5 pr-2 font-normal">T min</th>
+              <th class="text-right py-1.5 pr-2 font-normal">T median</th>
+              <th class="text-right py-1.5 font-normal">Pixels</th>
+            </tr>
+          </thead>
+          <tbody id="maskBatchTableBody" class="text-slate-300"></tbody>
+        </table>
+      </div>
+
+      <p class="text-[11px] text-slate-500 font-mono">
+        Frames whose pixel grid differs from the frame the polygon was drawn on are reported as
+        <span class="text-amber-400">dimension-mismatch</span> instead of silently measuring the wrong pixels.
+      </p>
+    </div>
+  </details>
+
+  <!-- PLOT GRID -->
+  <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
+    <div class="bg-slate-900 border border-slate-800 rounded-lg p-3">
+      <h3 class="text-[11px] font-bold font-mono text-slate-400 mb-2">THERMOGRAM + DRAWN POLYGON (dragmode: drawclosedpath)</h3>
+      <div id="maskHeatmap" class="w-full h-96"></div>
+    </div>
+    <div class="bg-slate-900 border border-slate-800 rounded-lg p-3">
+      <h3 class="text-[11px] font-bold font-mono text-slate-400 mb-2">MASK COOKIE-CUTTER (inside the polygon only)</h3>
+      <div id="maskCookie" class="w-full h-96"></div>
+    </div>
+  </div>
+
+  <footer class="mt-4 text-[11px] text-slate-500 font-mono">
+    Everything runs client-side: frames come from IndexedDB (the same store the Workbench fills), imported FLIR CSVs or the
+    built-in demo sequence. The polygon is stored in memory only and is re-drawn after a page reload.
+  </footer>
+
+  <!-- Application Modules (order matters: engines before the UI layer) -->
+  <script src="js/thermalEngine.js"></script>
+  <script src="js/microEngine.js"></script>
+  <script src="js/maskEngine.js"></script>
+  <script src="js/maskApp.js"></script>
+</body>
+</html>
