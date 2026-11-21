@@ -64,6 +64,8 @@ function loadMaskFrames() {
 
 function populateMaskFrameSelect() {
   const select = document.getElementById('maskFrameSelect');
+  const total = document.getElementById('maskFrameTotal');
+  if (total) total.innerText = String(maskFrames.length);
   if (!select) return;
   select.innerHTML = maskFrames
     .map((f, i) => `<option value="${i}">${f.label}${f.origin === 'indexeddb' ? '' : ' (memory)'}</option>`)
@@ -320,19 +322,30 @@ function roiShapePath(roi) {
   return 'M ' + roi.vertices.map(v => `${v.x} ${v.y}`).join(' L ') + ' Z';
 }
 
+// Colormap for both image panels. Greys is the default; the saturated ramps keep
+// particles that collapse into one grey step visually apart.
+function maskPaletteName() {
+  const select = document.getElementById('maskPalette');
+  return select && select.value ? select.value : 'Greys';
+}
+
 function renderMaskStudio() {
   if (!maskAnalysis) return;
 
   const { matrix, roi, compatible, contrast, maskedMatrix, frameContrast } = maskAnalysis;
-  const palette = 'Greys';
+  const palette = maskPaletteName();
+  const onLightRamp = palette === 'Greys';
+  const overlayStroke = onLightRamp ? '#111111' : '#ffffff';
+  const overlayFill = onLightRamp ? 'rgba(17, 17, 17, 0.08)' : 'rgba(255, 255, 255, 0.12)';
+  const bboxStroke = onLightRamp ? '#737373' : '#d4d4d4';
   const shapes = [];
 
   if (roi && compatible) {
     shapes.push({
       type: 'path',
       path: roiShapePath(roi),
-      line: { color: '#111111', width: 2 },
-      fillcolor: 'rgba(17, 17, 17, 0.08)',
+      line: { color: overlayStroke, width: 2 },
+      fillcolor: overlayFill,
       name: MASK_ROI_SHAPE_TAG,
       editable: false,
       layer: 'above'
@@ -341,7 +354,7 @@ function renderMaskStudio() {
       type: 'rect',
       x0: roi.bbox.x0 - 0.5, y0: roi.bbox.y0 - 0.5,
       x1: roi.bbox.x1 + 0.5, y1: roi.bbox.y1 + 0.5,
-      line: { color: '#737373', width: 1, dash: 'dot' },
+      line: { color: bboxStroke, width: 1, dash: 'dot' },
       fillcolor: 'rgba(0, 0, 0, 0)',
       name: `${MASK_ROI_SHAPE_TAG}-bbox`,
       editable: false,
@@ -372,8 +385,8 @@ function renderMaskStudio() {
     // Native closed-path lasso plus the rectangle fallback.
     modeBarButtonsToAdd: ['drawclosedpath', 'drawrect', 'eraseshape'],
     newshape: {
-      line: { color: '#111111', width: 2 },
-      fillcolor: 'rgba(17, 17, 17, 0.08)'
+      line: { color: overlayStroke, width: 2 },
+      fillcolor: overlayFill
     },
     displaylogo: false,
     responsive: true
@@ -417,6 +430,69 @@ function clearMaskRoi() {
   renderMaskBatchTable();
   recomputeMaskAnalysis();
   setMaskStatus('Global mask cleared - draw a new closed polygon on the thermogram');
+}
+
+// Placeholder panels so a cleared studio does not keep showing the last frame.
+function renderEmptyMaskPlots() {
+  if (typeof Plotly === 'undefined') return;
+  const layout = {
+    margin: { t: 5, b: 5, l: 5, r: 5 },
+    paper_bgcolor: 'transparent',
+    plot_bgcolor: 'transparent',
+    xaxis: { visible: false },
+    yaxis: { visible: false },
+    annotations: [{ text: 'no frames loaded', showarrow: false, font: { color: '#737373', size: 12 } }]
+  };
+  ['maskHeatmap', 'maskCookie'].forEach(id => {
+    if (document.getElementById(id)) Plotly.newPlot(id, [], layout, { displayModeBar: false, responsive: true });
+  });
+}
+
+// Empties the shared frame store (the Workbench album reads the same database) and
+// throws away every frame imported or generated in this session.
+function clearMaskDatabase() {
+  if (maskBatchRunning) {
+    setMaskStatus('Cancel the running batch sweep before clearing the frame database');
+    return;
+  }
+
+  const agreed = confirm('Delete every stored frame from IndexedDB and all imported/demo frames?\n\n'
+    + 'The Workbench album reads the same store, so its captures are deleted too. '
+    + 'The current mask and batch results are discarded as well.');
+  if (!agreed) return;
+
+  const reset = function () {
+    maskFrames = [];
+    maskActiveIdx = null;
+    maskAnalysis = null;
+    maskBatchRows = [];
+    window.globalROI = null;
+
+    const select = document.getElementById('maskFrameSelect');
+    if (select) select.innerHTML = '';
+    const fileInput = document.getElementById('maskCsvFiles');
+    if (fileInput) fileInput.value = '';
+
+    populateMaskFrameSelect();
+    setMaskProgress(0, 0);
+    renderMaskBatchTable();
+    updateMaskReadouts();
+    renderEmptyMaskPlots();
+    setMaskStatus('Frame database cleared - import FLIR CSVs or load the 12 demo frames');
+  };
+
+  if (!maskDb) {
+    reset();
+    return;
+  }
+
+  const tx = maskDb.transaction('frames', 'readwrite');
+  const request = tx.objectStore('frames').clear();
+  request.onsuccess = reset;
+  request.onerror = function () {
+    reset();
+    setMaskStatus('IndexedDB refused the clear - this session was reset, stored frames may still exist');
+  };
 }
 
 // --- Readouts ---
