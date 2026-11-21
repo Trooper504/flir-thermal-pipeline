@@ -1,10 +1,10 @@
-// --- DUAL TWO-PASS GIF GENERATION ---
+// Two passes so every frame shares one temperature range and one gradient range.
 async function generateSelectedGIF() {
   if (selectedIndices.size < 2) return;
 
   const selectedFrames = Array.from(selectedIndices).sort((a,b) => a - b).map(i => frameBuffer[i]);
   
-  // Pass 1: Compute global limits across selected frames
+  // Pass 1: global limits across the selected frames
   let globalMinTemp = Infinity, globalMaxTemp = -Infinity;
   let batchGradMin = Infinity, batchGradMax = -Infinity;
 
@@ -43,7 +43,7 @@ async function generateSelectedGIF() {
   const gifHeatmap = new GIF({ ...baseGifConfig });
   const gifGradient = new GIF({ ...baseGifConfig });
 
-  // Pass 2: Render & capture locked frames
+  // Pass 2: render and capture with those limits locked
   for (let i = 0; i < selectedFrames.length; i++) {
     const frame = selectedFrames[i];
     const matrix = frame.calibratedMatrix;
@@ -52,7 +52,7 @@ async function generateSelectedGIF() {
     Plotly.newPlot('thermalPlot', [{
       z: matrix,
       type: 'heatmap',
-      colorscale: 'YlOrRd',
+      colorscale: 'Greys',
       zmin: lockedMinTemp,
       zmax: lockedMaxTemp
     }], { margin: { t: 5, b: 5, l: 25, r: 5 }, paper_bgcolor: 'transparent', plot_bgcolor: 'transparent' });
@@ -66,8 +66,7 @@ async function generateSelectedGIF() {
     Plotly.newPlot('gradientPlot', [{
       z: grad,
       type: 'heatmap',
-      colorscale: 'RdBu',
-      reversescale: true,
+      colorscale: 'Greys',
       zmin: -globalMaxAbs,
       zmax: globalMaxAbs
     }], { margin: { t: 5, b: 5, l: 25, r: 5 }, paper_bgcolor: 'transparent', plot_bgcolor: 'transparent' });

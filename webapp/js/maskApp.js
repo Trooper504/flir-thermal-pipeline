@@ -1,7 +1,5 @@
-// --- webapp/js/maskApp.js ---
-// UI + Plotly orchestration for the Global Polygonal Mask Studio.
-// All geometry and statistics live in maskEngine.js (validated separately); this
-// file only does DOM wiring, drawing capture, batch scheduling and downloads.
+// Mask Studio UI: DOM wiring, lasso capture, batch scheduling, downloads.
+// Geometry and statistics live in maskEngine.js.
 
 let maskDb = null;
 let maskFrames = [];            // { label, matrix, origin }
@@ -13,13 +11,13 @@ let maskBatchRunning = false;
 let maskBatchCancelRequested = false;
 let maskShapeGuard = false;     // re-entrancy guard for plotly_relayout
 
-// Phase 3 state storage: the single reusable cookie-cutter applied to every frame.
-// Indexed as globalROI.mask[y - globalROI.bbox.y0][x - globalROI.bbox.x0].
+// Single rasterised mask reused for every frame.
+// globalROI.mask[y - globalROI.bbox.y0][x - globalROI.bbox.x0]
 window.globalROI = null;
 
 const MASK_ROI_SHAPE_TAG = 'global-mask-roi';
 
-// --- INDEXEDDB (same database/store as the main workbench and Micro Inspector) ---
+// --- IndexedDB (same database and store as the workbench and micro inspector) ---
 function initMaskDatabase() {
   const request = indexedDB.open('FlirThermalPipelineDB', 1);
   request.onupgradeneeded = function (e) {
@@ -96,7 +94,7 @@ function handleMaskFrameChange(event) {
   selectMaskFrame(parseInt(event.target.value, 10) || 0);
 }
 
-// --- SOURCES: CSV IMPORTS AND A SYNTHETIC SEQUENCE ---
+// --- Sources: CSV imports and a synthetic sequence ---
 async function handleMaskCsvUpload(event) {
   const files = Array.from(event.target.files || []);
   if (!files.length) return;
@@ -121,7 +119,7 @@ async function handleMaskCsvUpload(event) {
   setMaskStatus(`${imported} CSV frame(s) imported - ${maskFrames.length} frame(s) in the batch queue`);
 }
 
-/** Hardware-free sequence so the page is usable before any capture exists. */
+// Hardware-free sequence so the page is usable before any capture exists.
 function loadMaskDemoSequence(count = 12) {
   if (maskFrames.some(f => f.origin === 'demo')) {
     selectMaskFrame(maskFrames.findIndex(f => f.origin === 'demo'));
@@ -141,7 +139,7 @@ function loadMaskDemoSequence(count = 12) {
   setMaskStatus(`${count} synthetic demo frames loaded (80 x 60 px) - draw a lasso to define the mask`);
 }
 
-// --- MASK MODE: DRAWING A CLOSED POLYGON INSTEAD OF PANNING ---
+// --- Mask mode: drag draws a closed polygon instead of panning ---
 // Layout default `dragmode: 'drawclosedpath'` is what stops an operator's drag from
 // panning the heatmap; the modebar button below flips it back for inspection.
 function updateMaskDrawModeUi() {
@@ -149,8 +147,8 @@ function updateMaskDrawModeUi() {
   if (btn) {
     btn.innerText = maskDrawMode ? 'MASK MODE: ON - drag to lasso' : 'MASK MODE: OFF - pan / zoom';
     btn.className = maskDrawMode
-      ? 'px-3 py-1.5 rounded border border-fuchsia-700 bg-fuchsia-900/40 hover:bg-fuchsia-800/50 text-fuchsia-200 text-xs font-mono transition'
-      : 'px-3 py-1.5 rounded border border-slate-700 bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-mono transition';
+      ? 'px-3 py-1.5 border border-neutral-900 bg-neutral-900 text-white text-xs font-mono'
+      : 'px-3 py-1.5 border border-neutral-400 bg-neutral-100 hover:bg-neutral-200 text-neutral-800 text-xs font-mono';
   }
   const hint = document.getElementById('maskDrawHint');
   if (hint) {
@@ -169,11 +167,6 @@ function toggleMaskDrawMode() {
   updateMaskDrawModeUi();
 }
 
-/**
- * plotly_relayout entry point. Both the incremental (`shapes[0].path`) and the
- * wholesale (`shapes: [...]`) event payloads are covered: the authoritative list is
- * read back from the plot's own layout, minus our own tagged overlay shape.
- */
 function handleMaskRelayout(eventData) {
   if (!eventData || maskShapeGuard) return;
 
@@ -197,7 +190,7 @@ function handleMaskRelayout(eventData) {
   }
 }
 
-/** Consumes the newest operator-drawn shape (anything not tagged as our overlay). */
+// Consumes the newest operator-drawn shape (anything not tagged as our overlay).
 function consumeDrawnShapes() {
   const plotDiv = document.getElementById('maskHeatmap');
   const shapes = plotDiv && plotDiv.layout && Array.isArray(plotDiv.layout.shapes)
@@ -234,7 +227,7 @@ function applyDrawnRectFromEvent(eventData, keys) {
   commitDrawnVertices(polygonFromRect(x0, y0, x1, y1), 'plotly-drawrect');
 }
 
-/** SVG path -> integer vertices -> global mask. Also logs the data-space check. */
+// SVG path -> integer vertices -> global mask. Also logs the data-space check.
 function applyDrawnPath(pathString) {
   const matrix = getActiveMaskMatrix();
   if (!matrix) {
@@ -247,7 +240,7 @@ function applyDrawnPath(pathString) {
   const parsed = parseSvgPathToPoints(pathString);
   const space = verifyCoordinateSpace(parsed.points, width, height);
 
-  // Phase 2 verification: confirm Plotly returned data-space (matrix) coordinates.
+  // Confirm Plotly returned data-space (matrix) coordinates, not screen pixels.
   console.log('[global-mask] drawclosedpath raw path:', pathString);
   console.log('[global-mask] parsed vertices:', parsed.points,
     '| closed:', parsed.closed, '| commands:', parsed.commands.join(','));
@@ -262,7 +255,7 @@ function applyDrawnPath(pathString) {
   commitDrawnVertices(parsed.points, 'plotly-drawclosedpath');
 }
 
-/** Rasterises the polygon once and installs it as the reusable global mask. */
+// Rasterises the polygon once and installs it as the reusable global mask.
 function commitDrawnVertices(points, source) {
   const frame = getActiveMaskFrame();
   const matrix = frame ? frame.matrix : null;
@@ -291,12 +284,8 @@ function commitDrawnVertices(points, source) {
   recomputeMaskAnalysis();
 }
 
-// --- ANALYSIS & RENDERING ---
-function maskPalette() {
-  return document.getElementById('maskPalette')?.value || 'YlOrRd';
-}
-
-/** Applies the saved global mask to the selected frame (Phase 4, single frame). */
+// --- Analysis and rendering ---
+// Apply the saved mask to the selected frame.
 function recomputeMaskAnalysis() {
   const frame = getActiveMaskFrame();
   const matrix = frame ? frame.matrix : null;
@@ -325,7 +314,7 @@ function recomputeMaskAnalysis() {
   }
 }
 
-/** Polygon outline as an SVG path string in data space (what Plotly draws). */
+// Polygon outline as an SVG path string in data space (what Plotly draws).
 function roiShapePath(roi) {
   if (!roi || !roi.vertices || !roi.vertices.length) return null;
   return 'M ' + roi.vertices.map(v => `${v.x} ${v.y}`).join(' L ') + ' Z';
@@ -335,15 +324,15 @@ function renderMaskStudio() {
   if (!maskAnalysis) return;
 
   const { matrix, roi, compatible, contrast, maskedMatrix, frameContrast } = maskAnalysis;
-  const palette = maskPalette();
+  const palette = 'Greys';
   const shapes = [];
 
   if (roi && compatible) {
     shapes.push({
       type: 'path',
       path: roiShapePath(roi),
-      line: { color: '#e879f9', width: 2 },
-      fillcolor: 'rgba(232, 121, 249, 0.10)',
+      line: { color: '#111111', width: 2 },
+      fillcolor: 'rgba(17, 17, 17, 0.08)',
       name: MASK_ROI_SHAPE_TAG,
       editable: false,
       layer: 'above'
@@ -352,7 +341,7 @@ function renderMaskStudio() {
       type: 'rect',
       x0: roi.bbox.x0 - 0.5, y0: roi.bbox.y0 - 0.5,
       x1: roi.bbox.x1 + 0.5, y1: roi.bbox.y1 + 0.5,
-      line: { color: '#38bdf8', width: 1, dash: 'dot' },
+      line: { color: '#737373', width: 1, dash: 'dot' },
       fillcolor: 'rgba(0, 0, 0, 0)',
       name: `${MASK_ROI_SHAPE_TAG}-bbox`,
       editable: false,
@@ -373,18 +362,18 @@ function renderMaskStudio() {
     margin: { t: 5, b: 30, l: 40, r: 5 },
     paper_bgcolor: 'transparent',
     plot_bgcolor: 'transparent',
-    font: { color: '#94a3b8' },
-    // Phase 1: in Mask Mode a drag draws vertices instead of panning the plot.
+    font: { color: '#404040' },
+    // In mask mode a drag draws vertices instead of panning the plot.
     dragmode: maskDrawMode ? 'drawclosedpath' : 'zoom',
-    xaxis: { title: 'Pixel X', color: '#64748b', gridcolor: '#1e293b' },
-    yaxis: { title: 'Pixel Y', color: '#64748b', gridcolor: '#1e293b' },
+    xaxis: { title: 'Pixel X', color: '#404040', gridcolor: '#e5e5e5' },
+    yaxis: { title: 'Pixel Y', color: '#404040', gridcolor: '#e5e5e5' },
     shapes
   }, {
-    // Phase 1: expose Plotly's native closed-path lasso plus the rectangle fallback.
+    // Native closed-path lasso plus the rectangle fallback.
     modeBarButtonsToAdd: ['drawclosedpath', 'drawrect', 'eraseshape'],
     newshape: {
-      line: { color: '#e879f9', width: 2 },
-      fillcolor: 'rgba(232, 121, 249, 0.10)'
+      line: { color: '#111111', width: 2 },
+      fillcolor: 'rgba(17, 17, 17, 0.08)'
     },
     displaylogo: false,
     responsive: true
@@ -403,16 +392,16 @@ function renderMaskStudio() {
     margin: { t: 5, b: 30, l: 40, r: 5 },
     paper_bgcolor: 'transparent',
     plot_bgcolor: 'transparent',
-    font: { color: '#94a3b8' },
+    font: { color: '#404040' },
     dragmode: 'pan',
-    xaxis: { title: 'Pixel X', color: '#64748b', gridcolor: '#1e293b' },
-    yaxis: { title: 'Pixel Y', color: '#64748b', gridcolor: '#1e293b' }
+    xaxis: { title: 'Pixel X', color: '#404040', gridcolor: '#e5e5e5' },
+    yaxis: { title: 'Pixel Y', color: '#404040', gridcolor: '#e5e5e5' }
   }, { displaylogo: false, responsive: true });
 
   bindMaskDrawEvents();
 }
 
-/** plotly_relayout is the only event that carries a completed drawn shape. */
+// plotly_relayout is the only event that carries a completed drawn shape.
 function bindMaskDrawEvents() {
   const plotDiv = document.getElementById('maskHeatmap');
   if (!plotDiv || typeof plotDiv.on !== 'function') return;
@@ -430,7 +419,7 @@ function clearMaskRoi() {
   setMaskStatus('Global mask cleared - draw a new closed polygon on the thermogram');
 }
 
-// --- READOUTS ---
+// --- Readouts ---
 function updateMaskReadouts() {
   const set = (id, value) => {
     const el = document.getElementById(id);
@@ -503,7 +492,7 @@ function updateMaskReadouts() {
     : '--');
 }
 
-// --- BATCH AUTOMATION (one mask, N frames) ---
+// --- Batch run: one mask, N frames ---
 function setMaskProgress(done, total) {
   const bar = document.getElementById('maskProgressBar');
   const label = document.getElementById('maskProgressLabel');
@@ -512,10 +501,6 @@ function setMaskProgress(done, total) {
   if (label) label.innerText = `${done} / ${total} frame(s) - ${pct}%`;
 }
 
-/**
- * Phase 5: the polygon was rasterised once, so each frame only pays for the
- * cookie-cutter extraction. `await setTimeout(0)` per frame keeps the UI painting.
- */
 async function runMaskBatch() {
   if (maskBatchRunning) return;
 
@@ -598,7 +583,7 @@ function renderMaskBatchTable() {
   const count = document.getElementById('maskBatchCount');
 
   if (!maskBatchRows.length) {
-    body.innerHTML = '<tr><td colspan="8" class="py-2 text-slate-500">'
+    body.innerHTML = '<tr><td colspan="8" class="py-2 text-neutral-500">'
       + 'No sweep yet - draw a mask and run the batch.</td></tr>';
     if (count) count.innerText = '0 rows';
     return;
@@ -610,16 +595,16 @@ function renderMaskBatchTable() {
     const cells = s
       ? [s.max.toFixed(2), s.mean.toFixed(2), s.min.toFixed(2), s.median.toFixed(2), String(s.pixelCount)]
       : ['--', '--', '--', '--', '--'];
-    const statusClass = row.status === 'ok' ? 'text-emerald-400' : 'text-amber-400';
-    return `<tr class="border-t border-slate-800/70">
-      <td class="py-1 pr-2 text-slate-500">${row.index}</td>
-      <td class="py-1 pr-2 text-slate-300 truncate max-w-[15rem]">${escapeMaskHtml(row.label)}</td>
+    const statusClass = row.status === 'ok' ? 'text-neutral-700' : 'text-neutral-700';
+    return `<tr class="border-t border-neutral-200">
+      <td class="py-1 pr-2 text-neutral-500">${row.index}</td>
+      <td class="py-1 pr-2 text-neutral-800 truncate max-w-[15rem]">${escapeMaskHtml(row.label)}</td>
       <td class="py-1 pr-2 ${statusClass}">${row.status}</td>
-      <td class="py-1 pr-2 text-right text-rose-300">${cells[0]}</td>
-      <td class="py-1 pr-2 text-right text-slate-200">${cells[1]}</td>
-      <td class="py-1 pr-2 text-right text-sky-300">${cells[2]}</td>
-      <td class="py-1 pr-2 text-right text-slate-300">${cells[3]}</td>
-      <td class="py-1 text-right text-slate-400">${cells[4]}</td>
+      <td class="py-1 pr-2 text-right text-neutral-700">${cells[0]}</td>
+      <td class="py-1 pr-2 text-right text-neutral-900">${cells[1]}</td>
+      <td class="py-1 pr-2 text-right text-neutral-700">${cells[2]}</td>
+      <td class="py-1 pr-2 text-right text-neutral-800">${cells[3]}</td>
+      <td class="py-1 text-right text-neutral-600">${cells[4]}</td>
     </tr>`;
   }).join('');
 
@@ -629,7 +614,7 @@ function renderMaskBatchTable() {
   }
 }
 
-// --- EXPORT ENGINE (client-side Blob downloads, no server round-trip) ---
+// --- Exports (Blob downloads, no server round-trip) ---
 function triggerMaskDownload(filename, text, mimeType) {
   const blob = new Blob([text], { type: mimeType });
   const url = URL.createObjectURL(blob);

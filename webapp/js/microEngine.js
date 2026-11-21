@@ -1,12 +1,6 @@
-// --- webapp/js/microEngine.js ---
-// Sub-millimetre particle & thermal-dynamics math for the Micro Inspector studio.
-// DOM-free pure functions so the whole analysis path stays unit-testable.
+// Particle and flux numerics for the Micro Inspector. Pure functions, no DOM.
 
-// ============================================================================
-// 1. LOCAL CONTRAST STRETCHING (PERCENTILE CLIPPING)
-// ============================================================================
-
-/** Flattens a matrix to an ascending numeric array (skips non-finite values). */
+// Flattens a matrix to an ascending numeric array (skips non-finite values).
 function sortedValues(matrix, mask = null) {
   const out = [];
   for (let y = 0; y < matrix.length; y++) {
@@ -20,7 +14,7 @@ function sortedValues(matrix, mask = null) {
   return out;
 }
 
-/** Linear-interpolated percentile (matches numpy.percentile's default method). */
+// Linear-interpolated percentile (matches numpy.percentile's default method).
 function computePercentile(sortedAsc, pct) {
   const n = sortedAsc.length;
   if (n === 0) return NaN;
@@ -33,7 +27,7 @@ function computePercentile(sortedAsc, pct) {
   return sortedAsc[lo] + (idx - lo) * (sortedAsc[hi] - sortedAsc[lo]);
 }
 
-/** Robust display bounds: percentiles instead of the full min/max range. */
+// Robust display bounds: percentiles instead of the full min/max range.
 function computeContrastBounds(matrix, mask = null, lowPct = 2, highPct = 98) {
   const sorted = sortedValues(matrix, mask);
   if (!sorted.length) return null;
@@ -52,15 +46,11 @@ function computeContrastBounds(matrix, mask = null, lowPct = 2, highPct = 98) {
   };
 }
 
-// ============================================================================
-// 2. ARBITRARY DYNAMIC ROI (CENTER-ANCHORED SUB-MATRIX)
-// ============================================================================
-
 function normalizeGeometry(geometry) {
   return String(geometry).toLowerCase() === "ellipse" ? "ellipse" : "rect";
 }
 
-/** Center-anchored, edge-clamped bounding box around (cx, cy). */
+// Center-anchored, edge-clamped bounding box around (cx, cy).
 function computeRoiBounds(cx, cy, width, height, matWidth, matHeight) {
   if (!(matWidth > 0) || !(matHeight > 0)) return null;
 
@@ -100,7 +90,7 @@ function extractSubMatrix(matrix, bounds) {
   return patch;
 }
 
-/** Inscribed ellipse mask, or an all-true mask for the rectangular geometry. */
+// Inscribed ellipse mask, or an all-true mask for the rectangular geometry.
 function buildRoiMask(width, height, geometry = "rect") {
   if (normalizeGeometry(geometry) === "rect") {
     return Array.from({ length: height }, () => new Array(width).fill(true));
@@ -129,10 +119,6 @@ function applyDynamicRoiAtPoint(matrix, cx, cy, width, height, geometry = "rect"
   };
 }
 
-// ============================================================================
-// 3. MICRO-SCALE STATISTICS & SUB-PIXEL THERMAL CENTROID
-// ============================================================================
-
 function computePatchStatistics(patch, mask = null) {
   const values = sortedValues(patch, mask);
   if (!values.length) return null;
@@ -160,7 +146,7 @@ function computePatchStatistics(patch, mask = null) {
   };
 }
 
-/** Sub-pixel thermal centre of mass in patch-local coordinates (weights = contrast). */
+// Sub-pixel thermal centre of mass in patch-local coordinates (weights = contrast).
 function computeThermalCentroid(patch, mask = null) {
   const values = sortedValues(patch, mask);
   if (!values.length) return null;
@@ -182,16 +168,12 @@ function computeThermalCentroid(patch, mask = null) {
   return { x: sumX / sumW, y: sumY / sumW, weightSum: sumW, floorTemp };
 }
 
-/** Converts a patch-local point into absolute matrix coordinates. */
+// Converts a patch-local point into absolute matrix coordinates.
 function toAbsolutePoint(localPoint, bounds) {
   return { x: localPoint.x + bounds.x0, y: localPoint.y + bounds.y0 };
 }
 
-// ============================================================================
-// 4. DISCRETE FIELD OPERATORS (FOURIER FLUX -gradT AND ITS DIVERGENCE)
-// ============================================================================
-
-/** dT/dx per cell: central differences inside, one-sided at the x borders. */
+// dT/dx per cell: central differences inside, one-sided at the x borders.
 function computeGradientX(patch) {
   const h = patch.length;
   const w = patch[0].length;
@@ -204,7 +186,7 @@ function computeGradientX(patch) {
     }));
 }
 
-/** dT/dy per cell: central differences inside, one-sided at the y borders. */
+// dT/dy per cell: central differences inside, one-sided at the y borders.
 function computeGradientY(patch) {
   const h = patch.length;
   const w = patch[0].length;
@@ -217,11 +199,6 @@ function computeGradientY(patch) {
     }));
 }
 
-/**
- * Fourier's law: q = -k * gradT.
- * Units are relative (k = 1) unless a calibrated conductivity is supplied; the shown
- * magnitudes are only absolute once k and the true IFOV are known for the setup.
- */
 function computeFluxField(patch, conductivity = 1.0) {
   const dTdx = computeGradientX(patch);
   const dTdy = computeGradientY(patch);
@@ -231,18 +208,6 @@ function computeFluxField(patch, conductivity = 1.0) {
   return { dTdx, dTdy, qx, qy, magnitude, conductivity };
 }
 
-/**
- * Divergence of the heat flux from the 5-point cross stencil, i.e. the discrete
- * Laplacian:   lap = d2T/dx2 + d2T/dy2,   div(q) = -k * lap
- *
- * In the interior this is exactly T_left + T_right + T_up + T_down - 4*T_center.
- * At the patch borders a one-sided (forward/backward) second difference is used
- * instead: replicating the edge value would degrade the stencil into a first
- * difference and paint spurious sources/sinks along the rim of every ROI.
- * For an axis shorter than 3 px no curvature is resolvable, so that axis is 0.
- *
- * Positive = heat source, negative = heat sink.
- */
 function computeDivergenceField(patch, conductivity = 1.0) {
   const h = patch.length;
   const w = patch[0].length;
@@ -295,18 +260,12 @@ function computeDivergenceField(patch, conductivity = 1.0) {
   };
 }
 
-/** Arrow stride that keeps the quiver plot readable for large patches. */
+// Arrow stride that keeps the quiver plot readable for large patches.
 function computeQuiverStride(width, height, maxArrows = 120) {
   const cells = Math.max(1, width * height);
   return Math.max(1, Math.ceil(Math.sqrt(cells / Math.max(1, maxArrows))));
 }
 
-/**
- * Directional flux arrows as Plotly annotations: the tail sits on the pixel centre and
- * the head points along +q (the direction heat dissipates). Length and opacity both
- * scale with |q| so steep boundaries dominate and isothermal regions stay clean.
- * `ax`/`ay` are pixel offsets (screen space, +ay = down), hence the y sign flip.
- */
 function buildQuiverAnnotations(flux, bounds, options = {}) {
   const {
     stride = 1,
@@ -355,7 +314,7 @@ function buildQuiverAnnotations(flux, bounds, options = {}) {
         arrowsize: 0.7,
         arrowwidth: 1,
         text: '',
-        arrowcolor: `rgba(226, 232, 240, ${alpha.toFixed(3)})`,
+        arrowcolor: `rgba(17, 17, 17, ${alpha.toFixed(3)})`,
         name: 'micro-quiver'
       });
       if (arrows.length >= maxArrows) return arrows;
@@ -364,11 +323,7 @@ function buildQuiverAnnotations(flux, bounds, options = {}) {
   return arrows;
 }
 
-// ============================================================================
-// 5. 3D MICRO-TOPOGRAPHY SCALING
-// ============================================================================
-
-/** Geometric aspect ratio so non-square patches (2x3, 4x5) render undistorted. */
+// Geometric aspect ratio so non-square patches (2x3, 4x5) render undistorted.
 function computeAspectRatio(width, height) {
   const safeW = Math.max(1, Number(width) || 1);
   const safeH = Math.max(1, Number(height) || 1);
@@ -379,11 +334,6 @@ function buildTextMatrix(patch) {
   return patch.map(row => row.map(v => (typeof v === 'number' ? v.toFixed(2) : '')));
 }
 
-/**
- * Vertical scaling for the 3D surface: direct degC, or shifted-log ln(1 + dT) to lift
- * faint micro-conduction gradients while compressing peak summits. The raw Celsius grid
- * always travels in `text` (and `customdata`) so tooltips never show log-space numbers.
- */
 function buildSurfaceZ(patch, mode = "linear") {
   const values = sortedValues(patch);
   if (!values.length) return null;
@@ -423,10 +373,6 @@ function buildSurfaceZ(patch, mode = "linear") {
     hovertemplate: 'X: %{x}<br>Y: %{y}<br>T: %{text} \u00B0C<extra></extra>'
   };
 }
-
-// ============================================================================
-// 6. MULTI-MODAL EXPORT BUILDERS (CSV + JSON)
-// ============================================================================
 
 const MICRO_TEMP_BLOCK = '[CALIBRATED_TEMPERATURE_MATRIX_DEG_C]';
 const MICRO_DIVERGENCE_BLOCK = '[HEAT_FLUX_DIVERGENCE_MATRIX_RELATIVE_UNITS]';

@@ -43,15 +43,15 @@ flir-thermal-pipeline/
 
 * **Strict FLIR CSV Parser:** Parses Russian semicolon/comma CSV exports (`34,192` → `34.192`) cleanly without false artifacts.
 * **Full-Album & Incremental Ingestion:** `START STREAM` pulls the entire camera album, while `INGEST LAST N` extracts only the newest *N* captures (`?limit=N`) so a session can be resumed by importing just the shots taken since the last import. Captures already stored are skipped by filename.
-* **Click-to-Pick Differential Points:** `Pick P1` / `Pick P2` arm the 2D thermogram; a click writes the pixel coordinates straight into the `pt1X/pt1Y/pt2X/pt2Y` inputs (auto-advancing P1 → P2 → P1 for two-click pairing), draws cyan/amber markers plus a P1 → P2 guide line through `Plotly.relayout`, and stays synchronized with manual typing (which clamps to the frame bounds).
+* **Click-to-Pick Differential Points:** `Pick P1` / `Pick P2` arm the 2D thermogram; a click writes the pixel coordinates straight into the `pt1X/pt1Y/pt2X/pt2Y` inputs (auto-advancing P1 → P2 → P1 for two-click pairing), draws black / dark-grey markers plus a P1 → P2 guide line through `Plotly.relayout`, and stays synchronized with manual typing (which clamps to the frame bounds).
 * **Micro Inspector Studio (`micro_inspector.html`):** unblurred (`zsmooth: false`) thermograms with percentile-clipped contrast, arbitrary center-anchored ROIs ($2\times3$, $4\times5$, $20\times20$, rectangle or ellipse, plus free-hand drawing through Plotly's draw tools), MAD/robust-σ micro statistics, sub-pixel thermal centroid, aspect-matched 3D micro-topography (linear or shifted-log), $-\nabla T$ flux quivers with magnitude-scaled opacity, and $\nabla\cdot\vec q$ source/sink divergence with dual CSV/JSON export.
 * **Live Studio (`live.html`):** MJPEG viewfinder mode plus a hardware-free *radiometric polling* mode that paints genuine Planck-calibrated frames at 9 Hz, with an OSD crosshair, measured FPS, resolution telemetry and a snapshot hand-off that links straight into the workbench or the Micro Inspector.
 * **Mask Studio (`mask_studio.html`):** *global polygonal masking* — draw one closed lasso on a thermogram (`dragmode: 'drawclosedpath'`), the SVG path is parsed to whole-pixel vertices, ray-cast **once** into a reusable bounding-box boolean mask (`window.globalROI`), and that cookie-cutter is then applied to every frame in the ingestion queue. Masked-only min/max/mean/median/MAD/robust-σ statistics, a transparent cookie-cutter preview, and an async batch sweep (`await setTimeout(0)` per frame, cancellable progress bar) that exports a time-series CSV plus an optional JSON report with the embedded mask bitstrings.
 * **Signed 3x3 Spatial Thermal Gradient:** Calculates local pixel temperature deviation ($T_{\text{center}} - \bar{T}_{\text{neighbors}}$) with symmetric dynamic scaling centered at $0.0\text{ °C}$.
 * **3D Thermal Topography Surface:** Renders radiometric matrices as interactive 3D surface plots with projected isothermal contour lines.
 * **Differential Point Inspection:** Real-time point-to-point temperature delta calculation ($\Delta T_{1-2} = |T(P_1) - T(P_2)|$).
-* **Isothermal Range Masking:** Highlights specific temperature bands (TIso_min and TIso_Max) with high-contrast color overlays and calculates surface area percentage coverage.
-* **Multi-Palette Colormap Selector:** On-the-fly switching between `YlOrRd`, `Jet/Ironbow`, `Greys`, `Viridis`, and `Coolwarm`.
+* **Isothermal Range Masking:** Highlights a temperature band (TIso_min … TIso_Max) with a semi-transparent black overlay and calculates surface-area coverage.
+* **Monochrome rendering:** heatmaps use the `Greys` ramp (dark = hot) and signed fields are scaled symmetrically about zero with a zero contour. Line plots distinguish series by dash pattern and marker shape rather than hue.
 * **Dual Two-Pass GIF Compiler:** Scans selected batch sequences to lock global temperature bounds before compiling and downloading separate Heatmap and Spatial Gradient `.gif` animations.
 * **Structured JSON & PDF Report Exporter:** Export complete statistical frame reports with embedded Base64 canvas images or print formatted PDF diagnostic report cards.
 
@@ -245,80 +245,30 @@ never re-delivered in a loop.
 | `GET /api/v1/stream/live-mjpeg` | `multipart/x-mixed-replace` MJPEG at the E8-XT's 9 Hz. `?index=N` / `?backend=dshow\|v4l2` bind a device explicitly, `?frames=N` caps the stream for diagnostics, and HTTP 503 is returned when nothing opens. |
 | `POST /api/v1/camera/trigger-snapshot` | Coordinates a capture, waits (bounded) for a new file to appear and returns the newest radiometric frame. Runs `FLIR_TRIGGER_CMD` when configured, reports `trigger: hardware \| software`, and never touches USB power or sysfs. |
 
-> **Hardware reality for the live route.** The FLIR E-series (E4 … E8-XT) is a USB *mass-storage*
-> instrument with no UVC / DirectShow / V4L2 video interface, so `cv2.VideoCapture` cannot
-> enumerate it — on a laptop the only capture device is usually the built-in webcam. Live view
-> from these cameras is reachable only through FLIR's own software paths (Wi-Fi / composite
-> video), and the shutter/NUC cannot be commanded over mass storage. `webapp/live.html` therefore
-> reports exactly which device a stream is bound to and offers **radiometric polling** of
-> `/api/v1/thermal-frame` as a hardware-free thermal feed.
+> **Live route hardware notes.** The FLIR E-series is USB mass storage, not UVC, so
+> `cv2.VideoCapture` cannot open it. `live.html` reports which device a stream is bound to and
+> falls back to radiometric polling of `/api/v1/thermal-frame` when no video device exists.
 
-> **Is the camera actually UVC?** The note above is the project's expectation, not a measurement,
-> so the collector can check it on the host instead: `GET /api/v1/stream/devices?capabilities=true`
-> (the **UVC CAPABILITY PROBE** button on `live.html`) reports, per capture index, the fourcc OpenCV
-> negotiated, the USB interface class behind `/dev/videoN` (`0e` == Video Class), every pixel format
-> `v4l2-ctl` advertises, and the control list — a vendor-named control section is where UVC
-> extension-unit (XU) commands such as shutter / FFC live. Verdicts are blunt on purpose:
-> `no-capture-device` (mass-storage-only camera, exactly as expected here),
-> `scenario-a-8-bit-viewfinder` (a real live picture with no temperature meaning),
-> `scenario-b-radiometric-y16` (16-bit detector counts — still **no** Planck constants in the
-> stream), `metadata-nodes-only` (opens, never streams) and `capture-device-unclassified`
-> (format not reported). The same evidence by hand on the Pi:
-> `lsusb -v -d <vid:pid> | grep bInterfaceClass` (look for `0e`), `dmesg | grep -i uvcvideo`,
-> `v4l2-ctl --list-devices`, `v4l2-ctl -d /dev/video0 --list-formats-ext`, `v4l2-ctl -d /dev/video0 -l`.
-> Install `v4l-utils` (`sudo apt install v4l-utils`) — without it the format list is unavailable, and
-> add `?read_test=true` when a metadata node is suspected, because it opens happily and then never
-> delivers a frame (which is what would otherwise stop the MJPEG route mid-stream).
->
-> Every probe is bounded in the way each part can actually be bounded. The **frame-read test**
-> (`?read_test=true`) runs in a **child process**, so `subprocess` kills it on timeout: an OpenCV
-> capture cannot be interrupted from inside the interpreter, and abandoning one in-process was
-> tried here — the blocked call still owned the capture, which wedged the collector and then took
-> the whole process down under DirectShow. The child also means a crashing camera backend cannot
-> reach the API, and a timeout reports `ok: null` ("no evidence") rather than a failed device. The
-> **sweep** gets a 20 s budget (`?budget_seconds=N`) which is deliberately *soft*: it stops starting
-> new work, but an index already being inspected cannot be interrupted — `scanTruncated` says
-> plainly when the scan stopped early rather than implying that no device exists. Probing is also
-> the only route here that touches the devices, so an identical repeat within 10 s is answered from
-> the previous result (`cached: true`) unless `?fresh=true`: on a Windows workstation the *third*
-> consecutive probe of the same host stopped answering entirely, with no read test involved, which
-> is exactly what a double-clicked button would have caused. (Opening `/dev/videoN` on the Pi is
-> cheap and does not show this behaviour.)
->
-> An operating system can also refuse a camera to a desktop app **without failing the open**: the
-> capture is created and the read simply never returns, so a blocked camera looks exactly like
-> wedged hardware. Every probe therefore reports the host's own camera-access policy as well
-> (`hostCameraAccess`: the Windows *desktop apps* consent value, the per-user toggle and the
-> machine-wide one). When the policy is `Deny`, the summary says so and the timed-out read test is
-> labelled as that refusal instead of implying a faulty device; clear it in
-> `Settings → Privacy & security → Camera → Let desktop apps access your camera`, then re-probe
-> with `?fresh=true`. Reading the policy touches no device, costs nothing, and cannot wedge
-> anything.
->
-> `?probe=true` (the older `PROBE DEVICES` button) is deliberately unchanged: it opens every index
-> **in-process**, and an OpenCV open cannot be interrupted - so on a host that blocks or wedges a
-> camera that request can hang. Use `?capabilities=true` on such a host; the bounded probe is the
-> one to trust.
+`GET /api/v1/stream/devices?capabilities=true` (the **UVC CAPABILITY PROBE** button) checks the
+host instead: per index it reports the negotiated fourcc, the USB interface class behind
+`/dev/videoN` (`0e` = Video Class), the pixel formats and controls `v4l2-ctl` advertises, and the
+host's camera-access policy. Verdicts: `no-capture-device`, `scenario-a-8-bit-viewfinder`,
+`scenario-b-radiometric-y16` (detector counts, no Planck constants), `metadata-nodes-only`,
+`capture-device-unclassified`.
 
----
+* `?read_test=true` reads one frame per index in a child process, so a wedged backend can be
+  killed; a timeout reports `ok: null` ("no evidence") rather than a failed device.
+* `?max_index=N` / `?budget_seconds=N` bound the sweep; `scanTruncated` marks a scan that ran out
+  of budget.
+* A repeat probe within 10 s is answered from the previous result (`cached: true`) unless
+  `?fresh=true`.
+* `hostCameraAccess` reports the OS policy, because a denied camera and wedged hardware look the
+  same from inside OpenCV. Windows: Settings → Privacy & security → Camera → Let desktop apps
+  access your camera, then re-probe with `?fresh=true`.
+* `?probe=true` opens every index in-process and can hang on a blocked device; prefer
+  `?capabilities=true`.
 
-## Developer Notes
+Manual check on the Pi: `lsusb -v -d <vid:pid> | grep bInterfaceClass`, `v4l2-ctl --list-devices`,
+`v4l2-ctl -d /dev/video0 --list-formats-ext`, `v4l2-ctl -d /dev/video0 -l` (needs `v4l-utils`).
 
-* **Modular Architecture:** Frontend code is separated into `thermalEngine.js` (math/parsing), `gifEngine.js` (animations), and `app.js` (UI/IndexedDB/Plotly).
-* **Zero Build Step:** Built as a native HTML5/ES6 static app using Tailwind CSS, Plotly.js, and GIF.js via CDNs for simple edge deployment.
-* **ExifTool Processing:** `edge_collector/flir_hardware.py` contains the parsing logic converting raw ExifTool outputs into radiometric matrices. If you update the frame schema, align both `flir_hardware.py` and `webapp/js/thermalEngine.js`.
-
----
-
-## Technical Specifications & Theoretical Whitepaper
-
-To read the full theoretical foundation of the FLIR Radiometric Web Platform, including all 9 core analytical modules, use the link below:
-
-[View the Technical Specifications & Whitepaper](https://tinyurl.com/2hwfsrsn)
-
-> The document is available in view-only mode.
-
----
-
-## License & Contribution
-Maintains project repository license and contribution guidelines.
+.

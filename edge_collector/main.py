@@ -59,13 +59,7 @@ def read_root():
 
 @app.get("/api/v1/thermal-frame")
 def get_thermal_frame(response: Response, if_modified_since: float = 0.0):
-    """
-    Returns the latest radiometric frame.
-    If `if_modified_since` matches the timestamp of the newest *usable* capture,
-    returns HTTP 204 (No Content) to prevent duplicate frame polling. Non-radiometric
-    files at the end of the camera storage are skipped by the driver, and the timestamp
-    reported here is the one the client received, so polling stays in sync.
-    """
+    """Returns the latest radiometric frame."""
     try:
         # Check for change timestamp if driver supports metadata inspection
         if hasattr(camera_driver, "get_latest_image_info"):
@@ -110,13 +104,7 @@ def get_thermal_frame(response: Response, if_modified_since: float = 0.0):
 
 @app.get("/api/v1/thermal-album")
 def get_thermal_album(limit: int = 0):
-    """
-    Extracts and returns images present on the camera storage in chronological order.
-
-    `limit` > 0 returns only the `limit` most recent captures (newest shots last),
-    which lets clients incrementally ingest freshly taken pictures without
-    re-processing the whole album. `limit` <= 0 returns the entire album.
-    """
+    """Extracts and returns images present on the camera storage in chronological order."""
     if limit < 0:
         raise HTTPException(
             status_code=400, detail="`limit` must be greater than or equal to 0."
@@ -162,26 +150,7 @@ def get_thermal_album(limit: int = 0):
 def get_stream_devices(probe: bool = False, capabilities: bool = False,
                        read_test: bool = False, max_index: int = 0,
                        budget_seconds: float = 0.0, fresh: bool = False):
-    """Lists the capture bindings available to the MJPEG route, plus the active one.
-
-    `probe=true` opens each candidate index in turn (properties only - no frames are
-    read) so an operator can find which index their hardware answers on.
-
-    `capabilities=true` answers the UVC question with evidence instead of assumption: per
-    index it reports the fourcc OpenCV negotiated, the USB interface class behind
-    `/dev/videoN` (0x0e == USB Video Class), the pixel formats and the control list that
-    `v4l2-ctl` advertises, and a Scenario A (8-bit viewfinder) / Scenario B (16-bit
-    radiometric) verdict. The host's own camera-access policy is reported too
-    (`hostCameraAccess`), because an operating system that refuses a camera to desktop apps
-    presents exactly like wedged hardware: the open succeeds and no frame ever arrives.
-    `read_test=true` additionally reads one frame per index in a child process (so a wedged device
-    can be killed and a crashing camera backend cannot take the API down), which is how a UVC
-    *metadata* node is caught - it opens happily and then never delivers an image. `max_index`
-    bounds the scan (0 keeps the driver's default probe limit) and `budget_seconds` bounds its
-    wall-clock time (0 keeps the driver's default). Probing touches the devices, so an identical
-    repeat within a few seconds is answered from the previous result (`cached: true`) unless
-    `fresh=true` asks for a new measurement.
-    """
+    """Lists the capture bindings available to the MJPEG route, plus the active one."""
     payload = {
         "status": "success",
         "driver": stream_driver.status(),
@@ -211,11 +180,7 @@ def get_stream_devices(probe: bool = False, capabilities: bool = False,
 
 @app.get("/api/v1/stream/live-mjpeg")
 def get_live_mjpeg(index: int = -1, backend: str = "", frames: int = 0):
-    """
-    Streams the 8-bit viewfinder as MJPEG (multipart/x-mixed-replace), paced at the
-    E8-XT's 9 Hz. `index=-1` keeps the driver's configured/default binding; `frames`
-    caps the stream for diagnostics (0 = unlimited).
-    """
+    """Streams the 8-bit viewfinder as MJPEG (multipart/x-mixed-replace), paced at the"""
     device = stream_driver.open_device(index=index, backend=backend)
     if device is None:
         raise HTTPException(
@@ -247,15 +212,7 @@ def get_live_mjpeg(index: int = -1, backend: str = "", frames: int = 0):
 
 @app.post("/api/v1/camera/trigger-snapshot")
 def trigger_camera_snapshot(wait_seconds: float = 4.0, external_command: str = ""):
-    """
-    Coordinates a snapshot and returns the newest physically valid radiometric frame.
-
-    Runs an external trigger command only when one is configured (`FLIR_TRIGGER_CMD` or
-    the `external_command` parameter), waits (bounded) for the camera to write a new
-    file, then extracts it through the normal Planck pipeline. USB power / sysfs are
-    deliberately never touched: unbinding the storage interface would only reset the SD
-    reader that album ingestion relies on and cannot fire the instrument shutter.
-    """
+    """Coordinates a snapshot and returns the newest physically valid radiometric frame."""
     try:
         result = coordinate_snapshot(
             camera_driver,
@@ -291,8 +248,8 @@ def trigger_camera_snapshot(wait_seconds: float = 4.0, external_command: str = "
 
 if __name__ == "__main__":
     import uvicorn
-    # The binding is env-driven so the systemd unit (deploy/flir-collector.service) can move the
-    # listener without editing this module. 0.0.0.0:8081 stays the default: it is what the webapp
+    # Env-driven binding so deploy/flir-collector.service can move the listener; 0.0.0.0:8081
+    # stays the default the webapp expects.
     # and desktop client assume, and what the README documents.
     configured_port = str(os.getenv("FLIR_COLLECTOR_PORT", "8081")).strip()
     uvicorn.run(

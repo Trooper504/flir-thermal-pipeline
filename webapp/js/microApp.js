@@ -1,6 +1,4 @@
-// --- webapp/js/microApp.js ---
-// UI + Plotly orchestration for the Sub-Millimetre Particle & Thermal Dynamics Studio.
-// All numerical work lives in microEngine.js (validated separately).
+// Micro Inspector UI: DOM wiring and Plotly rendering. Numerics live in microEngine.js.
 
 let microDb = null;
 let microFrames = [];
@@ -11,7 +9,7 @@ let microMaxArrows = 140;
 
 const MICRO_ROI_SHAPE_TAG = 'micro-roi';
 
-// --- INDEXEDDB (same database/store as the main workbench) ---
+// --- IndexedDB (same database and store as the workbench) ---
 function initMicroDatabase() {
   const request = indexedDB.open('FlirThermalPipelineDB', 1);
   request.onupgradeneeded = function (e) {
@@ -97,7 +95,7 @@ function microRoiParams() {
   };
 }
 
-/** Preset buttons: 2x3, 4x4, 4x5, 20x20 ... */
+// Preset buttons: 2x3, 4x4, 4x5, 20x20 ...
 function applyMicroRoiPreset(width, height) {
   const wInput = document.getElementById('microRoiW');
   const hInput = document.getElementById('microRoiH');
@@ -125,7 +123,7 @@ function syncMicroAnchorInputs() {
   if (yInput) yInput.value = microAnchor.y;
 }
 
-// --- CORE ANALYSIS PIPELINE ---
+// --- Analysis pipeline ---
 let microAnalysis = null;
 
 function microContrastPercentiles() {
@@ -182,14 +180,14 @@ function recomputeMicroAnalysis() {
   updateMicroReadouts();
 }
 
-// --- RENDERING ---
+// --- Rendering ---
 function renderMicroPlots() {
   if (!microAnalysis) return;
   const { matrix, patch, bounds, geometry, contrast, frameContrast, flux, divergence } = microAnalysis;
 
   const clipToRoi = (document.getElementById('microContrastSource')?.value || 'roi') === 'roi';
   const clip = clipToRoi ? contrast : frameContrast;
-  const palette = document.getElementById('microPalette')?.value || 'YlOrRd';
+  const palette = 'Greys';
 
   // 1. Full-frame thermogram with the ROI outlined. zsmooth:false keeps single-pixel
   //    particles as hard blocks instead of bilinear-blurring them into neighbours.
@@ -205,21 +203,21 @@ function renderMicroPlots() {
     margin: { t: 5, b: 25, l: 30, r: 5 },
     paper_bgcolor: 'transparent',
     plot_bgcolor: 'transparent',
-    font: { color: '#94a3b8' },
-    xaxis: { title: 'Pixel X', color: '#64748b', gridcolor: '#1e293b' },
-    yaxis: { title: 'Pixel Y', color: '#64748b', gridcolor: '#1e293b' },
+    font: { color: '#404040' },
+    xaxis: { title: 'Pixel X', color: '#404040', gridcolor: '#e5e5e5' },
+    yaxis: { title: 'Pixel Y', color: '#404040', gridcolor: '#e5e5e5' },
     shapes: [{
       type: geometry === 'ellipse' ? 'circle' : 'rect',
       x0: bounds.x0 - 0.5, y0: bounds.y0 - 0.5, x1: bounds.x1 + 0.5, y1: bounds.y1 + 0.5,
-      line: { color: '#38bdf8', width: 1.5, dash: 'dot' },
-      fillcolor: 'rgba(56, 189, 248, 0.08)',
+      line: { color: '#111111', width: 1.5, dash: 'dot' },
+      fillcolor: 'rgba(17, 17, 17, 0.08)',
       name: MICRO_ROI_SHAPE_TAG
     }]
   }, {
     // Free-hand ROI: expose Plotly's draw tools so plotly_relayout can pick up the
     // operator's rectangle / circle and translate it into the W x H inputs.
     modeBarButtonsToAdd: ['drawrect', 'drawcircle', 'eraseshape'],
-    newshape: { line: { color: '#38bdf8', width: 2, dash: 'dot' }, fillcolor: 'rgba(56, 189, 248, 0.08)' },
+    newshape: { line: { color: '#111111', width: 2, dash: 'dot' }, fillcolor: 'rgba(17, 17, 17, 0.08)' },
     displaylogo: false,
     responsive: true
   });
@@ -236,17 +234,17 @@ function renderMicroPlots() {
     colorscale: palette,
     cmin: surface.cmin,
     cmax: surface.cmax,
-    contours: { z: { show: true, usecolormap: true, highlightcolor: '#e2e8f0', project: { z: true } } },
+    contours: { z: { show: true, usecolormap: true, highlightcolor: '#171717', project: { z: true } } },
     hovertemplate: surface.hovertemplate
   }], {
     margin: { t: 5, b: 5, l: 5, r: 5 },
     paper_bgcolor: 'transparent',
     plot_bgcolor: 'transparent',
-    font: { color: '#94a3b8' },
+    font: { color: '#404040' },
     scene: {
-      xaxis: { title: 'X', color: '#64748b', gridcolor: '#1e293b' },
-      yaxis: { title: 'Y', color: '#64748b', gridcolor: '#1e293b' },
-      zaxis: { title: surface.title, color: '#64748b', gridcolor: '#1e293b', range: surface.range },
+      xaxis: { title: 'X', color: '#404040', gridcolor: '#e5e5e5' },
+      yaxis: { title: 'Y', color: '#404040', gridcolor: '#e5e5e5' },
+      zaxis: { title: surface.title, color: '#404040', gridcolor: '#e5e5e5', range: surface.range },
       aspectratio: aspect
     }
   });
@@ -269,13 +267,13 @@ function renderMicroPlots() {
     margin: { t: 5, b: 25, l: 30, r: 5 },
     paper_bgcolor: 'transparent',
     plot_bgcolor: 'transparent',
-    font: { color: '#94a3b8' },
-    xaxis: { title: 'Pixel X', color: '#64748b', gridcolor: '#1e293b', range: [-0.5, bounds.width - 0.5] },
-    yaxis: { title: 'Pixel Y', color: '#64748b', gridcolor: '#1e293b', range: [-0.5, bounds.height - 0.5] },
+    font: { color: '#404040' },
+    xaxis: { title: 'Pixel X', color: '#404040', gridcolor: '#e5e5e5', range: [-0.5, bounds.width - 0.5] },
+    yaxis: { title: 'Pixel Y', color: '#404040', gridcolor: '#e5e5e5', range: [-0.5, bounds.height - 0.5] },
     annotations: arrows
   });
 
-  // 4. Divergence map: red = source, blue = sink, colour centre pinned to zero
+  // 4. Divergence map, symmetric about zero; the zero contour separates source from sink
   let absMax = 0;
   divergence.divergence.forEach(row => row.forEach(v => { if (Math.abs(v) > absMax) absMax = Math.abs(v); }));
 
@@ -283,27 +281,27 @@ function renderMicroPlots() {
     z: divergence.divergence,
     type: 'heatmap',
     zsmooth: false,
-    colorscale: 'RdBu',
-    reversescale: true,
+    colorscale: 'Greys',
     zmid: 0,
     zmin: -absMax,
     zmax: absMax,
-    colorbar: { title: { text: 'div q', font: { color: '#94a3b8' } }, tickfont: { color: '#94a3b8' } },
+    contours: { start: 0, end: 0, coloring: 'lines', showlines: true, line: { color: '#111111', width: 1 } },
+    colorbar: { title: { text: 'div q', font: { color: '#404040' } }, tickfont: { color: '#404040' } },
     hovertemplate: 'X: %{x}<br>Y: %{y}<br>div q: %{z:.3f}<extra></extra>'
   }], {
     margin: { t: 5, b: 25, l: 30, r: 5 },
     paper_bgcolor: 'transparent',
     plot_bgcolor: 'transparent',
-    font: { color: '#94a3b8' },
-    xaxis: { title: 'Pixel X', color: '#64748b', gridcolor: '#1e293b' },
-    yaxis: { title: 'Pixel Y', color: '#64748b', gridcolor: '#1e293b' }
+    font: { color: '#404040' },
+    xaxis: { title: 'Pixel X', color: '#404040', gridcolor: '#e5e5e5' },
+    yaxis: { title: 'Pixel Y', color: '#404040', gridcolor: '#e5e5e5' }
   });
 
   // Click-to-anchor plus drawn-shape ROI binding (idempotent across renders)
   setupMicroPointPicker('microHeatmap');
 }
 
-// --- READOUTS ---
+// --- Readouts ---
 function updateMicroReadouts() {
   if (!microAnalysis) return;
   const { bounds, geometry, stats, centroid, contrast, divergence, flux, patch } = microAnalysis;
@@ -341,7 +339,7 @@ function updateMicroReadouts() {
   setMicroStatus(`${patch.length} x ${patch[0].length} patch analysed (${stats.pixelCount} px)`);
 }
 
-// --- INTERACTION: CLICK TO ANCHOR, DRAW TO DEFINE THE ROI ---
+// --- Interaction: click to anchor, draw to define the ROI ---
 function setupMicroPointPicker(divId = 'microHeatmap') {
   const plotDiv = document.getElementById(divId);
   if (!plotDiv || typeof plotDiv.on !== 'function') return;
@@ -409,7 +407,7 @@ function setupMicroPointPicker(divId = 'microHeatmap') {
   });
 }
 
-// --- EXPORT ENGINE (client-side Blob downloads, no server round-trip) ---
+// --- Exports (Blob downloads, no server round-trip) ---
 function microExportPayload() {
   if (!microAnalysis) return null;
   const { matrix, patch, bounds, geometry, stats, centroid, contrast, flux, divergence } = microAnalysis;
@@ -466,7 +464,7 @@ function exportMicroJson() {
   setMicroStatus(`JSON exported (${payload.bounds.width} x ${payload.bounds.height} patch)`);
 }
 
-// --- SOURCES: CSV FILES AND A SYNTHETIC PARTICLE CLUSTER ---
+// --- Sources: CSV files and a synthetic particle cluster ---
 async function handleMicroCsvUpload(event) {
   const files = Array.from(event.target.files || []);
   if (!files.length) return;
@@ -491,7 +489,7 @@ async function handleMicroCsvUpload(event) {
   setMicroStatus(`${files.length} CSV patch(es) imported`);
 }
 
-/** Synthetic sub-millimetre particle cluster: 1 px core + 4 px skirt on a cool bias. */
+// Synthetic sub-millimetre particle cluster: 1 px core + 4 px skirt on a cool bias.
 function loadMicroDemoMatrix() {
   const width = 80, height = 60;
   const matrix = Array.from({ length: height }, (_, y) =>

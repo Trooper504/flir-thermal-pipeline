@@ -7,7 +7,7 @@ let importIntervalId = null;
 // Registry of capture filenames already stored, used to make camera ingestion incremental
 let ingestedFilenamesSet = new Set();
 
-// --- INDEXEDDB STORAGE ENGINE ---
+// --- IndexedDB storage ---
 function initDatabase() {
   const request = indexedDB.open("FlirThermalPipelineDB", 1);
   request.onupgradeneeded = function(e) {
@@ -67,7 +67,7 @@ function clearDbAndGallery() {
     updateBatchUI();
   }
 }
-// --- ADAPTIVE EMISSIVITY ZONES STATE & CONTROLS ---
+// --- Adaptive emissivity zones ---
 let activeEmissivityZones = [];
 
 function addEmissivityZone() {
@@ -111,25 +111,25 @@ function renderZonesTable() {
 
   if (activeEmissivityZones.length === 0) {
     tbody.innerHTML = `
-      <tr class="border-b border-slate-900 text-slate-500 italic">
+      <tr class="border-b border-neutral-200 text-neutral-500 italic">
         <td colspan="4" class="py-2 px-2 text-center">No custom zones added. (Default baseline emissivity applied to entire scene).</td>
       </tr>`;
     return;
   }
 
   tbody.innerHTML = activeEmissivityZones.map(zone => `
-    <tr class="border-b border-slate-800/60 hover:bg-slate-900/50">
-      <td class="py-1 px-2 text-slate-300 font-bold">${zone.name}</td>
-      <td class="py-1 px-2 text-slate-400">${zone.minTemp.toFixed(1)} &deg;C &ndash; ${zone.maxTemp.toFixed(1)} &deg;C</td>
-      <td class="py-1 px-2 text-sky-400 font-bold">&epsilon; = ${zone.emissivity.toFixed(2)}</td>
+    <tr class="border-b border-neutral-200 hover:bg-neutral-100">
+      <td class="py-1 px-2 text-neutral-800 font-bold">${zone.name}</td>
+      <td class="py-1 px-2 text-neutral-600">${zone.minTemp.toFixed(1)} &deg;C &ndash; ${zone.maxTemp.toFixed(1)} &deg;C</td>
+      <td class="py-1 px-2 text-neutral-700 font-bold">&epsilon; = ${zone.emissivity.toFixed(2)}</td>
       <td class="py-1 px-2">
-        <button onclick="removeEmissivityZone(${zone.id})" class="text-rose-400 hover:text-rose-300 text-[11px] underline">Remove</button>
+        <button onclick="removeEmissivityZone(${zone.id})" class="text-neutral-700 hover:text-neutral-900 text-[11px] underline">Remove</button>
       </td>
     </tr>
   `).join("");
 }
 
-// --- UNIFIED CALIBRATION & SPATIAL FILTERING PIPELINE ---
+// --- Calibration and spatial filtering pipeline ---
 function calibrateFrameMatrix(rawMatrix) {
   if (!rawMatrix || rawMatrix.length === 0) return rawMatrix;
 
@@ -170,7 +170,7 @@ function calibrateFrameMatrix(rawMatrix) {
 
   return calibrated;
 }
-// --- UI HANDLERS ---
+// --- UI handlers ---
 function handleSourceChange() {
   const source = document.getElementById("cfgDataSource").value;
   const apiInput = document.getElementById("cfgApiUrl");
@@ -178,16 +178,16 @@ function handleSourceChange() {
   
   if (source === "pi") {
     apiInput.disabled = false;
-    apiInput.classList.remove("text-slate-600", "opacity-60");
-    apiInput.classList.add("text-slate-200");
+    apiInput.classList.remove("text-neutral-400", "opacity-60");
+    apiInput.classList.add("text-neutral-900");
     csvContainer.classList.add("hidden");
   } else if (source === "csv") {
     apiInput.disabled = true;
-    apiInput.classList.add("text-slate-600", "opacity-60");
+    apiInput.classList.add("text-neutral-400", "opacity-60");
     csvContainer.classList.remove("hidden");
   } else {
     apiInput.disabled = true;
-    apiInput.classList.add("text-slate-600", "opacity-60");
+    apiInput.classList.add("text-neutral-400", "opacity-60");
     csvContainer.classList.add("hidden");
   }
 }
@@ -260,7 +260,7 @@ function replotActiveCanvas() {
   if (activeInspectedIdx !== null) inspectFrame(activeInspectedIdx);
 }
 
-// --- STREAM & INGESTION CONTROLLER ---
+// --- Stream and ingestion ---
 let lastCapturedMtime = 0;
 
 // Buttons that kick off an ingestion batch and must be locked while one is running
@@ -289,12 +289,6 @@ function getApiEndpoint() {
   return base.endsWith("/api/v1/thermal-frame") ? base : `${base}/api/v1/thermal-frame`;
 }
 
-/**
- * Starts an ingestion batch.
- * @param {number} [limit] Number of most recent camera captures to pull.
- *   0 / omitted ingests the complete album (and is also used for the
- *   polling simulation stream).
- */
 function startImportStream(limit = 0) {
   if (isImporting) return;
   const sourceMode = document.getElementById("cfgDataSource").value;
@@ -305,8 +299,8 @@ function startImportStream(limit = 0) {
 
   const stopBtn = document.getElementById("btnStop");
   stopBtn.disabled = false;
-  stopBtn.classList.remove("opacity-50", "cursor-not-allowed", "text-slate-600");
-  stopBtn.classList.add("text-slate-200", "hover:bg-slate-900");
+  stopBtn.classList.remove("opacity-50", "cursor-not-allowed", "text-neutral-400");
+  stopBtn.classList.add("text-neutral-900", "hover:bg-neutral-100");
 
   if (sourceMode === "pi") {
     // One-shot extraction for the DCIM camera album (all shots, or only the newest N)
@@ -318,9 +312,6 @@ function startImportStream(limit = 0) {
   }
 }
 
-/**
- * UI handler: ingest only the newest N captures from the camera album.
- */
 function ingestLastN() {
   const sourceMode = document.getElementById("cfgDataSource").value;
   if (sourceMode !== "pi") {
@@ -329,9 +320,8 @@ function ingestLastN() {
   }
 
   const input = document.getElementById("cfgIngestCount");
-  // Distinguish "no usable number" from a valid count before clamping: the clamp
-  // floors at 1, so an empty or non-numeric field would otherwise silently ingest
-  // the newest shot instead of reaching the guard below.
+  // Test for a usable number before clamping: the clamp floors at 1, which would turn
+  // an empty field into "ingest the newest shot".
   const typed = parseInt(input ? input.value : "", 10);
   const limit = Number.isFinite(typed) ? Math.max(1, Math.min(999, typed)) : 0;
   if (!limit) {
@@ -343,11 +333,6 @@ function ingestLastN() {
   startImportStream(limit);
 }
 
-/**
- * Stops the active ingestion batch.
- * @param {boolean} [preserveStatus] When true the status badge keeps the
- *   message written by the batch (e.g. "PI ALBUM LOADED (4 NEW)").
- */
 function stopImportStream(preserveStatus = false) {
   isImporting = false;
   if (importIntervalId) clearInterval(importIntervalId);
@@ -357,7 +342,7 @@ function stopImportStream(preserveStatus = false) {
 
   const stopBtn = document.getElementById("btnStop");
   stopBtn.disabled = true;
-  stopBtn.classList.add("opacity-50", "cursor-not-allowed", "text-slate-600");
+  stopBtn.classList.add("opacity-50", "cursor-not-allowed", "text-neutral-400");
 
   if (!preserveStatus) {
     document.getElementById("statusBadge").innerText = "SYSTEM IDLE";
@@ -420,11 +405,6 @@ async function ingestFrame() {
   }
 }
 
-/**
- * Fetches a batch of camera captures in a single request.
- * @param {number} [limit] 0 / omitted pulls the complete album, otherwise only
- *   the `limit` most recent captures are extracted by the edge collector.
- */
 async function ingestPiAlbum(limit = 0) {
   // Points directly to /api/v1/thermal-album
   const baseApi = getApiEndpoint().replace(/\/api\/.*$/, '');
@@ -477,8 +457,7 @@ async function ingestPiAlbum(limit = 0) {
 
     document.getElementById("lblFrameCount").innerText = frameBuffer.length;
 
-    // Surface how many of the requested most-recent shots were already stored,
-    // so the operator knows whether a larger "last N" window is needed.
+    // Report how many of the requested shots were already stored.
     const skipped = frames.length - newlyAdded;
     document.getElementById("statusBadge").innerText = limit > 0
       ? `PI LAST ${limit}: ${newlyAdded} NEW${skipped > 0 ? ` (${skipped} ALREADY STORED)` : ""}`
@@ -491,8 +470,7 @@ async function ingestPiAlbum(limit = 0) {
     console.error("Album fetch error:", err);
     document.getElementById("statusBadge").innerText = "PI CONNECTION ERROR";
   } finally {
-    // Album extraction is a complete one-shot batch, so stop the stream state immediately
-    // (status badge preserved so the batch outcome stays visible)
+    // One-shot batch: stop the stream state now, keep the status badge showing the outcome.
     stopImportStream(true);
   }
 }
@@ -500,16 +478,16 @@ async function ingestPiAlbum(limit = 0) {
 function appendThumbnailToGallery(frame) {
   const grid = document.getElementById("galleryGrid");
   const thumb = document.createElement("div");
-  thumb.className = "bg-slate-950 border border-slate-800 p-2 rounded cursor-pointer hover:border-slate-600 transition";
+  thumb.className = "bg-neutral-50 border border-neutral-300 p-2 cursor-pointer hover:border-neutral-500";
   
   thumb.innerHTML = `
     <div class="flex justify-between items-center mb-1">
-      <input type="checkbox" class="frame-checkbox rounded bg-slate-900 border-slate-700 text-slate-400 focus:ring-0" 
+      <input type="checkbox" class="frame-checkbox bg-white border-neutral-400 text-neutral-600 focus:ring-0" 
              onchange="toggleFrameSelect(${frame.id}, event)">
-      <span class="text-[10px] font-mono text-slate-500">#${frame.id + 1}</span>
+      <span class="text-[10px] font-mono text-neutral-500">#${frame.id + 1}</span>
     </div>
-    <div onclick="inspectFrame(${frame.id})" class="text-center py-1.5 bg-slate-900 rounded border border-slate-800">
-      <div class="text-[10px] font-mono text-slate-300 truncate">${frame.timestamp}</div>
+    <div onclick="inspectFrame(${frame.id})" class="text-center py-1.5 bg-white border border-neutral-300">
+      <div class="text-[10px] font-mono text-neutral-800 truncate">${frame.timestamp}</div>
     </div>
   `;
   grid.appendChild(thumb);
@@ -553,14 +531,13 @@ function updateBatchUI() {
   }
 }
 
-// --- INSPECTION DASHBOARD ---
-// --- INTERACTIVE POINT PICKING (2D thermogram click -> P1 / P2) ---
+// --- Inspection dashboard ---
+// --- Point picking: thermogram click writes P1 / P2 ---
 const POINT_OVERLAY_TAG = "pt-overlay";
-const P1_COLOR = "#06b6d4"; // cyan  -> matches the "Pick P1" control
-const P2_COLOR = "#f59e0b"; // amber -> matches the "Pick P2" control
+const P1_COLOR = "#111111";
+const P2_COLOR = "#4a4a4a";
 
-// Which point the next thermogram click writes. Auto-advances P1 -> P2 -> P1 so two
-// successive clicks define the differential / cross-section pair.
+// Auto-advances P1 -> P2 -> P1, so two clicks define the differential pair.
 let activePickTarget = "P1";
 
 function clampIndex(value, size) {
@@ -569,7 +546,7 @@ function clampIndex(value, size) {
   return Math.max(0, Math.min(size - 1, v));
 }
 
-/** Current P1/P2 selection, clamped to the active frame's matrix bounds. */
+// Current P1/P2 selection, clamped to the active frame's matrix bounds.
 function readPointSelection(matrix = null) {
   const m = matrix || (activeInspectedIdx !== null && frameBuffer[activeInspectedIdx]
     ? frameBuffer[activeInspectedIdx].calibratedMatrix
@@ -589,7 +566,7 @@ function readPointSelection(matrix = null) {
   };
 }
 
-/** Marker circles + P1 -> P2 guide line. Shared by the render path and the picker. */
+// Marker circles + P1 -> P2 guide line. Shared by the render path and the picker.
 function buildPointOverlayShapes(p1, p2) {
   const circle = (pt, color) => ({
     type: "circle",
@@ -602,7 +579,7 @@ function buildPointOverlayShapes(p1, p2) {
     {
       type: "line",
       x0: p1.x, y0: p1.y, x1: p2.x, y1: p2.y,
-      line: { color: "rgba(255, 255, 255, 0.75)", width: 1.5, dash: "dot" },
+      line: { color: "rgba(17, 17, 17, 0.45)", width: 1.5, dash: "dot" },
       name: POINT_OVERLAY_TAG
     },
     circle(p1, P1_COLOR),
@@ -610,13 +587,13 @@ function buildPointOverlayShapes(p1, p2) {
   ];
 }
 
-/** P1 / P2 text labels drawn on the thermogram. */
+// P1 / P2 text labels drawn on the thermogram.
 function buildPointOverlayAnnotations(p1, p2) {
   const label = (pt, text, color) => ({
     x: pt.x, y: pt.y, text: text, showarrow: true, arrowhead: 2,
     arrowcolor: color, ax: 0, ay: -18,
     font: { color: color, size: 11, family: "monospace" },
-    bgcolor: "rgba(15, 23, 42, 0.85)",
+    bgcolor: "rgba(255, 255, 255, 0.92)",
     bordercolor: color, borderwidth: 1,
     name: POINT_OVERLAY_TAG
   });
@@ -639,11 +616,11 @@ function updatePickUIFeedback() {
   const p1Active = armed && activePickTarget === "P1";
   const p2Active = armed && activePickTarget === "P2";
 
-  btnP1.classList.toggle("bg-cyan-500", p1Active);
-  btnP1.classList.toggle("text-slate-950", p1Active);
+  btnP1.classList.toggle("bg-neutral-800", p1Active);
+  btnP1.classList.toggle("text-white", p1Active);
   btnP1.classList.toggle("font-bold", p1Active);
-  btnP2.classList.toggle("bg-amber-500", p2Active);
-  btnP2.classList.toggle("text-slate-950", p2Active);
+  btnP2.classList.toggle("bg-neutral-800", p2Active);
+  btnP2.classList.toggle("text-white", p2Active);
   btnP2.classList.toggle("font-bold", p2Active);
 
   if (statusLbl) {
@@ -657,7 +634,7 @@ function updatePickUIFeedback() {
   }
 }
 
-/** Binds plotly_click on the 2D thermogram (safe to call after every render). */
+// Binds plotly_click on the 2D thermogram (safe to call after every render).
 function setupPlotlyPointPicker(plotDivId = "thermalPlot") {
   const plotDiv = document.getElementById(plotDivId);
   if (!plotDiv || typeof plotDiv.on !== "function") return; // Plotly not attached yet
@@ -696,7 +673,7 @@ function handleThermogramPointClick(data) {
   updateDifferentialPointReadouts();
 }
 
-/** Redraws only the P1/P2 overlay, leaving the rendered heatmap untouched. */
+// Redraws only the P1/P2 overlay, leaving the rendered heatmap untouched.
 function annotatePointsOnHeatmap(divId = "thermalPlot", p1 = null, p2 = null) {
   const plotDiv = document.getElementById(divId);
   if (!plotDiv || typeof plotDiv.layout !== "object" || typeof Plotly === "undefined") return;
@@ -715,7 +692,7 @@ function annotatePointsOnHeatmap(divId = "thermalPlot", p1 = null, p2 = null) {
   });
 }
 
-/** Lightweight refresh of the P1/P2 readouts (the click path must stay non-disruptive). */
+// Lightweight refresh of the P1/P2 readouts (the click path must stay non-disruptive).
 function updateDifferentialPointReadouts() {
   if (activeInspectedIdx === null || !frameBuffer[activeInspectedIdx]) return;
 
@@ -730,7 +707,7 @@ function updateDifferentialPointReadouts() {
   if (lblDeltaT) lblDeltaT.innerText = `${Math.abs(tempP1 - tempP2).toFixed(2)} deg C`;
 }
 
-/** Manual coordinate entry: clamp the typed values, then re-render the active canvas. */
+// Manual coordinate entry: clamp the typed values, then re-render the active canvas.
 function syncManualPointInput() {
   if (activeInspectedIdx === null || !frameBuffer[activeInspectedIdx]) return;
 
@@ -746,8 +723,7 @@ function syncManualPointInput() {
   replotActiveCanvas();
 }
 
-// --- INSPECT FRAME WITH ISOTHERMAL MASK OVERLAY ---
-// --- INSPECT FRAME WITH DYNAMIC PALETTE SELECTION ---
+// --- Inspect frame: isotherm overlay, gradient and surface views ---
 function inspectFrame(idx) {
   activeInspectedIdx = idx;
   const frame = frameBuffer[idx];
@@ -761,28 +737,26 @@ function inspectFrame(idx) {
   const maxBound = parseFloat(document.getElementById("cfgMaxTemp").value);
   const sensitivity = parseFloat(document.getElementById("cfgHotspotSensitivity").value);
 
-  // Read Selected Palette Preferences
-  const heatmapPalette = document.getElementById("cfgHeatmapPalette")?.value || "YlOrRd";
-  const gradientPalette = document.getElementById("cfgGradientPalette")?.value || "RdBu";
+  const heatmapPalette = "Greys";
 
   const roi = detectHotspotROI(matrix, sensitivity);
   const alertContainer = document.getElementById("hotspotAlert");
 
   if (roi.hasHotspot) {
     alertContainer.innerHTML = `
-      <span class="text-slate-200 font-mono">
+      <span class="text-neutral-900 font-mono">
         HOTSPOT: Peak ${roi.peakTemp.toFixed(1)} &deg;C at (${roi.peakCoord.x}, ${roi.peakCoord.y})
       </span>
       ${roi.isContaminated ? `
-        <span class="text-amber-400 font-mono text-[10px] ml-2 px-1.5 py-0.5 bg-amber-950/60 border border-amber-800 rounded">
+        <span class="text-neutral-700 font-mono text-[10px] ml-2 px-1.5 py-0.5 bg-neutral-100 border border-neutral-400">
           OUTLIER SKEW (MEDIAN FALLBACK ACTIVE)
         </span>` : ''}
     `;
   } else {
     alertContainer.innerHTML = `
-      <span class="text-slate-600 font-mono">NO HOTSPOT DETECTED</span>
+      <span class="text-neutral-400 font-mono">NO HOTSPOT DETECTED</span>
       ${roi.isContaminated ? `
-        <span class="text-amber-400 font-mono text-[10px] ml-2 px-1.5 py-0.5 bg-amber-950/60 border border-amber-800 rounded">
+        <span class="text-neutral-700 font-mono text-[10px] ml-2 px-1.5 py-0.5 bg-neutral-100 border border-neutral-400">
           OUTLIER SKEW DETECTED
         </span>` : ''}
     `;
@@ -811,7 +785,6 @@ function inspectFrame(idx) {
   const isIsoEnabled = document.getElementById("chkEnableIso")?.checked || false;
   const isoMin = parseFloat(document.getElementById("isoMinTemp")?.value) || 33.0;
   const isoMax = parseFloat(document.getElementById("isoMaxTemp")?.value) || 35.0;
-  const isoColorChoice = document.getElementById("isoMaskColor")?.value || "magenta";
 
   let heatmapTraces = [{
     z: matrix,
@@ -827,13 +800,12 @@ function inspectFrame(idx) {
     document.getElementById("lblIsoPixelCount").innerText = `${isoResult.matchCount} px`;
     document.getElementById("lblIsoAreaPct").innerText = `${isoResult.areaPercentage.toFixed(2)} %`;
 
-    const colorHexMap = { magenta: '#ff00ff', cyan: '#00ffff', lime: '#00ff00' };
-    const targetColor = colorHexMap[isoColorChoice] || '#ff00ff';
-
     heatmapTraces.push({
       z: isoResult.maskMatrix,
       type: 'heatmap',
-      colorscale: [[0, targetColor], [1, targetColor]],
+      colorscale: [[0, 'rgba(17, 17, 17, 0.45)'], [1, 'rgba(17, 17, 17, 0.45)']],
+      zmin: 0,
+      zmax: 1,
       showscale: false,
       hovertemplate: 'X: %{x}<br>Y: %{y}<br><b>ISOTHERM: %{z:.2f} deg C</b><extra></extra>'
     });
@@ -842,13 +814,12 @@ function inspectFrame(idx) {
     document.getElementById("lblIsoAreaPct").innerText = `0.00 %`;
   }
 
-  // --- SPATIAL GRADIENT / DEVIATION ENGINE (Laplacian vs Sobel) ---
+  // --- Gradient / deviation (Laplacian or Sobel) ---
   const spatialMode = document.getElementById("cfgSpatialOpMode")?.value || "laplacian";
   let grad = null;
   let plotZmin = undefined;
   let plotZmax = undefined;
-  let plotColorscale = gradientPalette;
-  let plotReversescale = gradientPalette === 'RdBu';
+  let plotColorscale = 'Greys';
   let hoverTemplate = '';
 
   if (spatialMode === "sobel") {
@@ -859,8 +830,6 @@ function inspectFrame(idx) {
     }));
     plotZmin = 0.0;
     plotZmax = maxMag;
-    plotColorscale = 'Viridis';
-    plotReversescale = false;
     hoverTemplate = 'X: %{x}<br>Y: %{y}<br>|&nabla;T|: %{z:.3f} &deg;C/px<extra></extra>';
 
     const titleEl = document.getElementById("lblSpatialPlotTitle");
@@ -887,7 +856,7 @@ function inspectFrame(idx) {
       type: 'rect',
       x0: roi.bbox.x0 - 1, y0: roi.bbox.y0 - 1,
       x1: roi.bbox.x1 + 1, y1: roi.bbox.y1 + 1,
-      line: { color: '#e2e8f0', width: 1.5 }
+      line: { color: '#171717', width: 1.5 }
     });
   }
 
@@ -901,7 +870,7 @@ function inspectFrame(idx) {
     margin: { t: 5, b: 5, l: 25, r: 5 }, 
     paper_bgcolor: 'transparent', 
     plot_bgcolor: 'transparent', 
-    font: { color: '#94a3b8' },
+    font: { color: '#404040' },
     shapes: layoutShapes,
     annotations: buildPointOverlayAnnotations(point1, point2)
   });
@@ -915,7 +884,6 @@ function inspectFrame(idx) {
     z: grad,
     type: 'heatmap',
     colorscale: plotColorscale,
-    reversescale: plotReversescale,
     zmin: plotZmin,
     zmax: plotZmax,
     hovertemplate: hoverTemplate
@@ -923,7 +891,7 @@ function inspectFrame(idx) {
     margin: { t: 5, b: 5, l: 25, r: 5 }, 
     paper_bgcolor: 'transparent', 
     plot_bgcolor: 'transparent', 
-    font: { color: '#94a3b8' } 
+    font: { color: '#404040' } 
   });
 
 // Render 3D Surface Topography (Linear vs Shifted-Logarithmic)
@@ -963,18 +931,18 @@ function inspectFrame(idx) {
     cmin: surfaceCmin,
     cmax: surfaceCmax,
     contours: {
-      z: { show: true, usecolormap: true, highlightcolor: "#e2e8f0", project: { z: true } }
+      z: { show: true, usecolormap: true, highlightcolor: "#171717", project: { z: true } }
     },
     hovertemplate: surfaceHoverTemplate
   }], {
     margin: { t: 10, b: 10, l: 10, r: 10 },
     paper_bgcolor: 'transparent',
     plot_bgcolor: 'transparent',
-    font: { color: '#94a3b8' },
+    font: { color: '#404040' },
     scene: {
-      xaxis: { title: 'X', color: '#64748b', gridcolor: '#1e293b' },
-      yaxis: { title: 'Y', color: '#64748b', gridcolor: '#1e293b' },
-      zaxis: { title: surfaceZTitle, color: '#64748b', gridcolor: '#1e293b', range: surfaceZRange },
+      xaxis: { title: 'X', color: '#404040', gridcolor: '#e5e5e5' },
+      yaxis: { title: 'Y', color: '#404040', gridcolor: '#e5e5e5' },
+      zaxis: { title: surfaceZTitle, color: '#404040', gridcolor: '#e5e5e5', range: surfaceZRange },
       aspectratio: { x: 1, y: 1, z: 0.4 }
     }
   });
@@ -1015,14 +983,13 @@ function inspectFrame(idx) {
     Plotly.newPlot('astmCorrectionPlot', [{
       z: offsetMatrix,
       type: 'heatmap',
-      colorscale: 'RdBu',
-      reversescale: true,
+      colorscale: 'Greys',
       hovertemplate: 'X: %{x}<br>Y: %{y}<br>Offset: %{z:+.2f} °C<extra></extra>'
     }], {
       margin: { t: 5, b: 5, l: 25, r: 5 },
       paper_bgcolor: 'transparent',
       plot_bgcolor: 'transparent',
-      font: { color: '#94a3b8' }
+      font: { color: '#404040' }
     });
   }
 
@@ -1057,13 +1024,13 @@ function updateLineProfile() {
     y: sliceData,
     type: 'scatter',
     mode: 'lines',
-    line: { color: '#cbd5e1', width: 1.5 }
+    line: { color: '#737373', width: 1.5 }
   }], {
     margin: { t: 10, b: 25, l: 30, r: 10 },
     paper_bgcolor: 'transparent',
     plot_bgcolor: 'transparent',
-    xaxis: { title: orientation === 'horizontal' ? 'Pixel X' : 'Pixel Y', color: '#64748b' },
-    yaxis: { title: 'Temp (deg C)', color: '#64748b' }
+    xaxis: { title: orientation === 'horizontal' ? 'Pixel X' : 'Pixel Y', color: '#404040' },
+    yaxis: { title: 'Temp (deg C)', color: '#404040' }
   });
 }
 
@@ -1086,8 +1053,7 @@ function exportSelectedCSV() {
     document.body.removeChild(link);
   });
 }
-// --- STRUCTURED JSON REPORT EXPORTER ---
-// --- COMPREHENSIVE STRUCTURED JSON REPORT EXPORTER ---
+// --- JSON report export ---
 async function exportLabReportJSON() {
   if (activeInspectedIdx === null || !frameBuffer[activeInspectedIdx]) {
     alert("Select a frame from the gallery to generate a lab report.");
@@ -1223,7 +1189,7 @@ async function exportLabReportJSON() {
   downloadLink.click();
   downloadLink.remove();
 }
-// --- HEAT FLUX PRESET HANDLER ---
+// --- Heat flux presets ---
 function handleFluxMaterialPreset() {
   const preset = document.getElementById("cfgFluxMaterial").value;
   if (preset !== "custom") {
@@ -1232,7 +1198,7 @@ function handleFluxMaterialPreset() {
   replotHeatFlux();
 }
 
-// --- RENDER HEAT FLUX VECTOR FIELD & MAGNITUDE PLOTS ---
+// --- Heat flux vector field and magnitude plots ---
 function replotHeatFlux() {
   if (activeInspectedIdx === null || !frameBuffer[activeInspectedIdx]) return;
   const frame = frameBuffer[activeInspectedIdx];
@@ -1254,13 +1220,13 @@ function replotHeatFlux() {
   Plotly.newPlot('fluxQuiverPlot', [{
     z: matrix,
     type: 'heatmap',
-    colorscale: 'YlOrRd',
+    colorscale: 'Greys',
     hovertemplate: 'X: %{x}<br>Y: %{y}<br>Temp: %{z:.2f} °C<extra></extra>'
   }], {
     margin: { t: 5, b: 5, l: 25, r: 5 },
     paper_bgcolor: 'transparent',
     plot_bgcolor: 'transparent',
-    font: { color: '#94a3b8' },
+    font: { color: '#404040' },
     annotations: fluxData.quiverAnnotations
   });
 
@@ -1268,13 +1234,13 @@ function replotHeatFlux() {
   Plotly.newPlot('fluxMagnitudePlot', [{
     z: fluxData.qMagMatrix,
     type: 'heatmap',
-    colorscale: 'Viridis',
+    colorscale: 'Greys',
     hovertemplate: 'X: %{x}<br>Y: %{y}<br>Flux: %{z:.2f} kW/m²<extra></extra>'
   }], {
     margin: { t: 5, b: 5, l: 25, r: 5 },
     paper_bgcolor: 'transparent',
     plot_bgcolor: 'transparent',
-    font: { color: '#94a3b8' }
+    font: { color: '#404040' }
   });
 }
 
@@ -1353,17 +1319,17 @@ async function generatePrintableLabReport() {
       <title>FLIR Full Research Diagnostic Report - Frame ${frame.id + 1}</title>
       <style>
         @page { size: A4; margin: 15mm; }
-        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, monospace; color: #0f172a; background: #ffffff; margin: 0; padding: 10px; font-size: 11px; }
-        .header { display: flex; justify-content: space-between; align-items: flex-end; border-bottom: 2px solid #0f172a; padding-bottom: 8px; margin-bottom: 12px; }
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, monospace; color: #111111; background: #ffffff; margin: 0; padding: 10px; font-size: 11px; }
+        .header { display: flex; justify-content: space-between; align-items: flex-end; border-bottom: 2px solid #111111; padding-bottom: 8px; margin-bottom: 12px; }
         h1 { font-size: 16px; margin: 0; text-transform: uppercase; letter-spacing: 0.5px; }
-        h2 { font-size: 12px; margin: 14px 0 6px 0; border-bottom: 1px solid #cbd5e1; padding-bottom: 3px; text-transform: uppercase; color: #1e293b; }
+        h2 { font-size: 12px; margin: 14px 0 6px 0; border-bottom: 1px solid #cbd5e1; padding-bottom: 3px; text-transform: uppercase; color: #111111; }
         .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
         .grid-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; }
         table { width: 100%; border-collapse: collapse; margin-top: 4px; margin-bottom: 8px; }
         th, td { border: 1px solid #cbd5e1; padding: 4px 8px; text-align: left; }
         th { background: #f1f5f9; font-weight: 600; }
         .figure-card { border: 1px solid #cbd5e1; border-radius: 4px; padding: 6px; background: #f8fafc; page-break-inside: avoid; margin-bottom: 8px; }
-        .figure-card h3 { font-size: 10px; margin: 0 0 4px 0; text-transform: uppercase; color: #475569; }
+        .figure-card h3 { font-size: 10px; margin: 0 0 4px 0; text-transform: uppercase; color: #525252; }
         .figure-card img { width: 100%; height: auto; display: block; border: 1px solid #e2e8f0; border-radius: 2px; }
         .badge { display: inline-block; padding: 2px 6px; border-radius: 3px; font-size: 10px; font-weight: bold; background: #e2e8f0; }
         .page-break { page-break-before: always; }
@@ -1373,7 +1339,7 @@ async function generatePrintableLabReport() {
       <div class="header">
         <div>
           <h1>FLIR Radiometric Diagnostic Lab Report</h1>
-          <div style="color: #64748b; font-size: 10px;">Edge Ingestion, Multi-Parameter Calibration, Spatial Gradient & NDT Analysis</div>
+          <div style="color: #404040; font-size: 10px;">Edge Ingestion, Multi-Parameter Calibration, Spatial Gradient & NDT Analysis</div>
         </div>
         <div style="text-align: right; font-family: monospace;">
           <div><strong>Frame:</strong> #${frame.id + 1} (${frame.timestamp})</div>
@@ -1455,7 +1421,7 @@ async function generatePrintableLabReport() {
       <div class="header">
         <div>
           <h1>Advanced NDT & Multi-Parameter Research Analysis</h1>
-          <div style="color: #64748b; font-size: 10px;">Pulsed Phase Thermography (PPT), TSR Derivatives & PCT Modes</div>
+          <div style="color: #404040; font-size: 10px;">Pulsed Phase Thermography (PPT), TSR Derivatives & PCT Modes</div>
         </div>
         <div style="text-align: right; font-family: monospace;">Frame #${frame.id + 1}</div>
       </div>
@@ -1465,16 +1431,16 @@ async function generatePrintableLabReport() {
       <div class="grid-2">
         <div class="figure-card">
           <h3>PPT Phase Map (&phi; in Radians) &mdash; Subsurface Defect Isolation</h3>
-          ${pptPhaseImg ? `<img src="${pptPhaseImg}">` : '<div style="padding:40px;text-align:center;color:#94a3b8;">Execute PPT module to populate</div>'}
+          ${pptPhaseImg ? `<img src="${pptPhaseImg}">` : '<div style="padding:40px;text-align:center;color:#404040;">Execute PPT module to populate</div>'}
         </div>
         <div class="figure-card">
           <h3>PPT Amplitude Map (A in Arbitrary Units)</h3>
-          ${pptAmpImg ? `<img src="${pptAmpImg}">` : '<div style="padding:40px;text-align:center;color:#94a3b8;">Execute PPT module to populate</div>'}
+          ${pptAmpImg ? `<img src="${pptAmpImg}">` : '<div style="padding:40px;text-align:center;color:#404040;">Execute PPT module to populate</div>'}
         </div>
       </div>
       <div class="figure-card">
         <h3>TSR Point Profile & 1st/2nd Time Derivatives at P1 (Cooling Velocity & Inflection)</h3>
-        ${tsrImg ? `<img src="${tsrImg}">` : '<div style="padding:20px;text-align:center;color:#94a3b8;">Execute PPT/TSR module to populate</div>'}
+        ${tsrImg ? `<img src="${tsrImg}">` : '<div style="padding:20px;text-align:center;color:#404040;">Execute PPT/TSR module to populate</div>'}
       </div>
 
       <!-- SECTION 5: PRINCIPAL COMPONENT THERMOGRAPHY (PCT) & ASTM CALIBRATION -->
@@ -1482,11 +1448,11 @@ async function generatePrintableLabReport() {
       <div class="grid-2">
         <div class="figure-card">
           <h3>PCT Spatial Eigen-Surface Map (Active EOF Mode)</h3>
-          ${pctSpatialImg ? `<img src="${pctSpatialImg}">` : '<div style="padding:40px;text-align:center;color:#94a3b8;">Execute PCT module to populate</div>'}
+          ${pctSpatialImg ? `<img src="${pctSpatialImg}">` : '<div style="padding:40px;text-align:center;color:#404040;">Execute PCT module to populate</div>'}
         </div>
         <div class="figure-card">
           <h3>Eigenvalue Spectrum (% Variance Explained)</h3>
-          ${pctScreeImg ? `<img src="${pctScreeImg}">` : '<div style="padding:40px;text-align:center;color:#94a3b8;">Execute PCT module to populate</div>'}
+          ${pctScreeImg ? `<img src="${pctScreeImg}">` : '<div style="padding:40px;text-align:center;color:#404040;">Execute PCT module to populate</div>'}
         </div>
       </div>
 
@@ -1507,7 +1473,7 @@ async function generatePrintableLabReport() {
   reportWindow.document.close();
 }
 
-// --- TRANSIENT TIME CONSTANT FIT CONTROLLER ---
+// --- Transient time constant fit ---
 function runTransientTauFit() {
   const framesToProcess = selectedIndices.size >= 3
     ? Array.from(selectedIndices).sort((a, b) => a - b).map(i => frameBuffer[i])
@@ -1567,7 +1533,7 @@ function runTransientTauFit() {
       name: `Measured Probe (${px}, ${py})`,
       mode: 'markers',
       type: 'scatter',
-      marker: { color: '#38bdf8', size: 6 }
+      marker: { color: '#111111', size: 6 }
     },
     {
       x: fitResult.timeArray,
@@ -1575,20 +1541,20 @@ function runTransientTauFit() {
       name: `Fit: T(t) = ${fitResult.T_inf.toFixed(1)} + (${(fitResult.T_0 - fitResult.T_inf).toFixed(1)})e^{-t/${fitResult.tau.toFixed(1)}}`,
       mode: 'lines',
       type: 'scatter',
-      line: { color: '#f59e0b', width: 2, dash: 'solid' }
+      line: { color: '#111111', width: 2, dash: 'solid' }
     }
   ], {
     margin: { t: 10, b: 30, l: 40, r: 20 },
     paper_bgcolor: 'transparent',
     plot_bgcolor: 'transparent',
-    font: { color: '#94a3b8' },
-    xaxis: { title: 'Elapsed Time (seconds)', color: '#64748b', gridcolor: '#1e293b' },
-    yaxis: { title: 'Temperature (°C)', color: '#64748b', gridcolor: '#1e293b' },
+    font: { color: '#404040' },
+    xaxis: { title: 'Elapsed Time (seconds)', color: '#404040', gridcolor: '#e5e5e5' },
+    yaxis: { title: 'Temperature (°C)', color: '#404040', gridcolor: '#e5e5e5' },
     legend: { orientation: 'h', y: 1.15 }
   });
 }
 
-// --- RUN ADVANCED PPT AND TSR ANALYSIS ---
+// --- PPT and TSR analysis ---
 function runPptAnalysis() {
   const framesToProcess = selectedIndices.size >= 3 
     ? Array.from(selectedIndices).sort((a,b) => a - b).map(i => frameBuffer[i])
@@ -1604,7 +1570,6 @@ function runPptAnalysis() {
   }
 
   const freqBin = parseInt(document.getElementById("cfgFftBin")?.value) || 1;
-  const phasePalette = document.getElementById("cfgPhasePalette")?.value || "Viridis";
 
   // 1. Compute PPT Phase and Amplitude
   const ppt = computePptMaps(framesToProcess, freqBin);
@@ -1612,25 +1577,25 @@ function runPptAnalysis() {
     Plotly.newPlot('pptPhasePlot', [{
       z: ppt.phaseMatrix,
       type: 'heatmap',
-      colorscale: phasePalette,
+      colorscale: 'Greys',
       hovertemplate: 'X: %{x}<br>Y: %{y}<br>Phase: %{z:.3f} rad<extra></extra>'
     }], {
       margin: { t: 5, b: 5, l: 25, r: 5 },
       paper_bgcolor: 'transparent',
       plot_bgcolor: 'transparent',
-      font: { color: '#94a3b8' }
+      font: { color: '#404040' }
     });
 
     Plotly.newPlot('pptAmpPlot', [{
       z: ppt.amplitudeMatrix,
       type: 'heatmap',
-      colorscale: 'Hot',
+      colorscale: 'Greys',
       hovertemplate: 'X: %{x}<br>Y: %{y}<br>Amplitude: %{z:.3f}<extra></extra>'
     }], {
       margin: { t: 5, b: 5, l: 25, r: 5 },
       paper_bgcolor: 'transparent',
       plot_bgcolor: 'transparent',
-      font: { color: '#94a3b8' }
+      font: { color: '#404040' }
     });
   }
 
@@ -1647,7 +1612,7 @@ function runPptAnalysis() {
         name: 'T(t) deg C',
         type: 'scatter',
         mode: 'lines+markers',
-        line: { color: '#f59e0b', width: 2 }
+        line: { color: '#111111', width: 2 }
       },
       {
         x: tsr.timeSteps,
@@ -1655,7 +1620,7 @@ function runPptAnalysis() {
         name: '1st Deriv (dT/dt)',
         type: 'scatter',
         mode: 'lines',
-        line: { color: '#38bdf8', dash: 'dot', width: 1.5 },
+        line: { color: '#737373', dash: 'dot', width: 1.5 },
         yaxis: 'y2'
       },
       {
@@ -1664,19 +1629,19 @@ function runPptAnalysis() {
         name: '2nd Deriv (d2T/dt2)',
         type: 'scatter',
         mode: 'lines',
-        line: { color: '#ec4899', dash: 'dash', width: 1.5 },
+        line: { color: '#a3a3a3', dash: 'dash', width: 1.5 },
         yaxis: 'y2'
       }
     ], {
       margin: { t: 10, b: 25, l: 40, r: 40 },
       paper_bgcolor: 'transparent',
       plot_bgcolor: 'transparent',
-      font: { color: '#94a3b8' },
-      xaxis: { title: 'Frame Sequence Index (t)', color: '#64748b' },
-      yaxis: { title: 'Temp (deg C)', color: '#f59e0b' },
+      font: { color: '#404040' },
+      xaxis: { title: 'Frame Sequence Index (t)', color: '#404040' },
+      yaxis: { title: 'Temp (deg C)', color: '#404040' },
       yaxis2: {
         title: 'Derivatives',
-        color: '#38bdf8',
+        color: '#404040',
         overlaying: 'y',
         side: 'right'
       },
@@ -1684,7 +1649,7 @@ function runPptAnalysis() {
     });
   }
 }
-// --- PRINCIPAL COMPONENT THERMOGRAPHY (PCT) CONTROLLER ---
+// --- PCT controller ---
 function runPctAnalysis() {
   const framesToProcess = selectedIndices.size >= 3 
     ? Array.from(selectedIndices).sort((a,b) => a - b).map(i => frameBuffer[i])
@@ -1696,7 +1661,6 @@ function runPctAnalysis() {
   }
 
   const selectedMode = parseInt(document.getElementById("cfgPctMode")?.value) || 2;
-  const palette = document.getElementById("cfgPctPalette")?.value || "Viridis";
   const pctResult = computePctModes(framesToProcess, 3);
 
   if (!pctResult) return;
@@ -1713,14 +1677,13 @@ function runPctAnalysis() {
   Plotly.newPlot('pctSpatialPlot', [{
     z: activeEof,
     type: 'heatmap',
-    colorscale: palette,
-    reversescale: palette === 'RdBu',
+    colorscale: 'Greys',
     hovertemplate: 'X: %{x}<br>Y: %{y}<br>EOF Amplitude: %{z:.4f}<extra></extra>'
   }], {
     margin: { t: 5, b: 5, l: 25, r: 5 },
     paper_bgcolor: 'transparent',
     plot_bgcolor: 'transparent',
-    font: { color: '#94a3b8' }
+    font: { color: '#404040' }
   });
 
   // 2. Render Scree Spectrum Plot
@@ -1729,18 +1692,18 @@ function runPctAnalysis() {
     y: pctResult.varianceRatios,
     type: 'bar',
     marker: {
-      color: pctResult.varianceRatios.map((_, i) => i === modeIdx ? '#38bdf8' : '#334155')
+      color: pctResult.varianceRatios.map((_, i) => i === modeIdx ? '#111111' : '#d4d4d4')
     }
   }], {
     margin: { t: 15, b: 30, l: 35, r: 10 },
     paper_bgcolor: 'transparent',
     plot_bgcolor: 'transparent',
-    font: { color: '#94a3b8' },
-    xaxis: { title: 'Principal Component', color: '#64748b' },
-    yaxis: { title: 'Variance Explained (%)', color: '#64748b' }
+    font: { color: '#404040' },
+    xaxis: { title: 'Principal Component', color: '#404040' },
+    yaxis: { title: 'Variance Explained (%)', color: '#404040' }
   });
 }
-// --- RADIOMETRIC PLANCK RE-CALIBRATION ---
+// --- Radiometric Planck re-calibration ---
 function applyPlanckRecalibration(matrix, targetEmissivity = 0.95, reflTempC = 20.0, baseEmissivity = 0.95) {
   const eps = Math.max(0.05, Math.min(1.0, parseFloat(targetEmissivity)));
   const eps_base = Math.max(0.05, Math.min(1.0, parseFloat(baseEmissivity)));

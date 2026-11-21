@@ -8,29 +8,21 @@ import subprocess
 import numpy as np
 from PIL import Image
 
-# Physical validity window (°C) for a radiometric microbolometer payload. The FLIR
-# E8-XT is specified for roughly -20 °C to +550 °C; the wider window leaves headroom
-# for hot lab targets while still rejecting foreign or corrupted captures.
+# Physical validity window (°C): wider than the E8-XT spec (-20..550) to keep hot lab
+# targets, narrow enough to reject foreign or corrupted captures.
 MIN_VALID_TEMP_C = -50.0
 MAX_VALID_TEMP_C = 1000.0
 
-# Number of newest captures probed when resolving the live frame. A stray screenshot or
-# foreign JPEG at the end of the DCIM folder must not stall /api/v1/thermal-frame, so the
-# driver walks backwards through this many candidates before giving up.
+# How many of the newest captures to probe when resolving the live frame.
 LIVE_FRAME_LOOKBACK = 3
 
-# Where the E8-XT's SD card appears once the host automounts it. Raspberry Pi OS mounts removable
-# media under /media/<user>/, so this default matches the account it was written for and nothing
-# else; FLIR_MOUNT_PATH overrides it (deploy/setup_pi.sh --mount, and the systemd unit).
+# Default mount point for the camera's SD card (Raspberry Pi OS: /media/<user>/...);
+# FLIR_MOUNT_PATH overrides it.
 DEFAULT_CAMERA_MOUNT_PATH = "/media/raspberrypi_local/07F5-01A9/DCIM/100_FLIR"
 
 
 class FlirExtractorNative:
-    """Native FLIR thermal extractor using ExifTool.
-
-    Parses 16-bit raw detector counts with big-endian byte-swapping
-    and applies dynamic FLIR Planck calibration.
-    """
+    """Native FLIR thermal extractor using ExifTool."""
 
     def __init__(self, exiftool_path="exiftool"):
         self.exiftool_path = exiftool_path
@@ -74,12 +66,7 @@ class FlirExtractorNative:
         return float(np.clip(tau, 0.1, 1.0))
 
     def _assert_physical_range(self, temp_celsius: np.ndarray, image_path: str) -> None:
-        """Rejects non-radiometric or corrupted payloads before clients ingest them.
-
-        A missing/foreign RawThermalImage chunk or a mismatched Planck calibration
-        makes the inversion saturate, producing values such as -273 °C or millions of
-        °C. Raising here lets `extract_full_album()` log the file and skip it.
-        """
+        """Rejects non-radiometric or corrupted payloads before clients ingest them."""
         if np.isnan(temp_celsius).any():
             raise ValueError(
                 f"Non-radiometric or corrupted payload in {image_path}: "
@@ -96,11 +83,7 @@ class FlirExtractorNative:
             )
 
     def extract_thermal_matrix(self, image_path: str) -> np.ndarray:
-        """Converts a radiometric FLIR JPEG into a 2D °C matrix.
-
-        Raises ValueError when the capture carries no usable radiometric payload,
-        or when the inverted temperatures fall outside physical limits.
-        """
+        """Converts a radiometric FLIR JPEG into a 2D °C matrix."""
         if not os.path.exists(image_path):
             raise FileNotFoundError(f"Thermal image not found: {image_path}")
 
@@ -190,10 +173,7 @@ class RealFlirCamera:
         #camera_mount_path = "./",
         max_lookup: int = LIVE_FRAME_LOOKBACK,
     ):
-        # Raspberry Pi OS automounts the camera's SD card under /media/<user>/, so the default only
-        # matches the account it was written for and a differently named one silently reads 0
-        # frames. FLIR_MOUNT_PATH wins over the default (this is how the systemd unit in deploy/
-        # points the collector at *this* Pi's mount) but never over an explicitly passed path.
+        # FLIR_MOUNT_PATH wins over the default mount path, never over an explicitly passed path.
         env_mount = (os.getenv("FLIR_MOUNT_PATH") or "").strip()
         if env_mount and camera_mount_path == DEFAULT_CAMERA_MOUNT_PATH:
             camera_mount_path = env_mount
@@ -201,9 +181,8 @@ class RealFlirCamera:
         self.extractor = FlirExtractorNative()
         # Size of the reverse-scan window used by the live frame route
         self.max_lookup = max(1, int(max_lookup))
-        # Bounded probe cache: path -> ((mtime, size), frame dict or None).
-        # Keeps the 1 Hz live poll from re-running ExifTool on unchanged candidates,
-        # while mtime + size still invalidate entries when a file is replaced.
+        # Bounded probe cache: path -> ((mtime, size), frame or None), so the 1 Hz poll does not
+        # re-run ExifTool on unchanged candidates.
         # Holds at most `max_lookup` frames (~the candidate window).
         self._probe_cache = {}
 
@@ -211,9 +190,8 @@ class RealFlirCamera:
         files = glob.glob(os.path.join(self.mount_path, "*.jpg")) + glob.glob(
             os.path.join(self.mount_path, "*.JPG")
         )
-        # The two globs append every capture twice on case-insensitive filesystems
-        # (Windows, or a FAT-formatted camera SD card), which would duplicate frames
-        # and corrupt "most recent N captures" slicing. Keep one entry per file.
+        # Case-insensitive filesystems (Windows, FAT SD card) list each capture twice; keep one
+        # entry per file.
         unique_files = {}
         for file_path in files:
             unique_files.setdefault(os.path.normcase(os.path.abspath(file_path)), file_path)
@@ -235,11 +213,7 @@ class RealFlirCamera:
         return files[-lookup:][::-1]
 
     def _probe_capture(self, path: str) -> tuple:
-        """Extracts one candidate, caching the outcome.
-
-        Returns (frame_dict, None) for a physically valid radiometric capture, or
-        (None, error_message) when the file is foreign/corrupted/unreadable.
-        """
+        """Extracts one candidate, caching the outcome."""
         try:
             stat = os.stat(path)
             stamp = (stat.st_mtime, stat.st_size)
@@ -299,13 +273,7 @@ class RealFlirCamera:
         )
 
     def get_latest_image_info(self, max_lookup: int = None) -> dict:
-        """Newest usable capture, used by the live route's change detection.
-
-        Resolving the newest *valid* capture here (rather than the newest file on the
-        mount) keeps the `if_modified_since` watermark identical to the frames the
-        client actually receives. Otherwise a stray non-radiometric file at the end of
-        the DCIM folder would keep the endpoint re-delivering the same frame forever.
-        """
+        """Newest usable capture, used by the live route's change detection."""
         path, frame = self._resolve_live_frame(max_lookup)
         return {"path": path, "name": frame["name"], "mtime": frame["mtime"]}
 
@@ -318,13 +286,7 @@ class RealFlirCamera:
         return frame
 
     def extract_full_album(self, limit: int = 0) -> list:
-        """Extracts the camera album in chronological order (oldest first).
-
-        `limit` > 0 restricts the scan to the `limit` most recent captures
-        (files are pre-sorted by mtime), which avoids running ExifTool over
-        shots that were already ingested by the client. `limit` <= 0 returns
-        the complete album.
-        """
+        """Extracts the camera album in chronological order (oldest first)."""
         files = self.get_all_images()
         if limit and limit > 0:
             files = files[-int(limit):]

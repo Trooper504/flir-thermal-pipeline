@@ -1,22 +1,11 @@
-// --- webapp/js/liveApp.js ---
-// Live Video & Acquisition Studio controller.
-//
-// Two honest source modes:
-//   * "mjpeg"       - real multipart/x-mixed-replace feed from /api/v1/stream/live-mjpeg,
-//                     i.e. whatever video device the collector has bound. The FLIR E8-XT
-//                     itself is not UVC, so this is only meaningful with a real video source.
-//   * "radiometric" - polls /api/v1/thermal-frame at 9 Hz and paints the genuine
-//                     Planck-calibrated matrix to a canvas: a hardware-free thermal feed.
-//
-// The UVC capability probe below reports, per capture index, whether a USB Video Class
-// interface actually exists and whether a stream is 16-bit radiometric or 8-bit viewfinder,
-// so those assumptions are checked on the host instead of trusted.
+// Live view controller. "mjpeg" proxies the collector's bound video device; "radiometric"
+// polls the Planck-calibrated matrix at 9 Hz and paints it to a canvas. What the host
+// actually exposes is probed (probeStreamCapabilities), not assumed.
 
 const LIVE_TARGET_FPS = 9;
 const LIVE_POLL_INTERVAL_MS = Math.round(1000 / LIVE_TARGET_FPS);   // ~111 ms
 const LIVE_PALETTE = [
-  [0.00, 0, 0, 8], [0.20, 60, 20, 110], [0.40, 140, 30, 90],
-  [0.60, 220, 70, 40], [0.80, 250, 160, 20], [1.00, 255, 255, 220]
+  [0.00, 0, 0, 0], [0.50, 128, 128, 128], [1.00, 255, 255, 255]
 ];
 
 let liveActive = false;
@@ -41,7 +30,7 @@ function liveBaseApi() {
 function logLive(message, level = 'info') {
   const log = document.getElementById('liveLog');
   if (!log) return;
-  const colors = { info: 'text-slate-400', warn: 'text-amber-400', error: 'text-rose-400', ok: 'text-emerald-400' };
+  const colors = { info: 'text-neutral-600', warn: 'text-neutral-700', error: 'text-neutral-700', ok: 'text-neutral-700' };
   const line = document.createElement('div');
   line.className = colors[level] || colors.info;
   line.innerText = `[${new Date().toLocaleTimeString()}] ${message}`;
@@ -57,7 +46,7 @@ function setLiveState(state) {
   setLiveText('liveTlmState', state);
 }
 
-// --- PALETTE + CANVAS PAINTING (radiometric mode) ---
+// --- Grayscale ramp and canvas painting (radiometric mode) ---
 function livePaletteColor(t) {
   const v = Math.max(0, Math.min(1, t));
   for (let i = 0; i < LIVE_PALETTE.length - 1; i++) {
@@ -72,7 +61,7 @@ function livePaletteColor(t) {
       ];
     }
   }
-  return [255, 255, 220];
+  return [255, 255, 255];
 }
 
 function livePercentile(sortedAsc, pct) {
@@ -139,7 +128,7 @@ function drawMatrixToCanvas(matrix, canvas) {
   return { min, max, width, height };
 }
 
-// --- STREAM CONTROL ---
+// --- Stream control ---
 function registerLiveFrame(width, height) {
   liveFrames++;
   const now = performance.now ? performance.now() : Date.now();
@@ -160,7 +149,7 @@ function registerLiveFrame(width, height) {
   setLiveText('liveOsdClock', new Date().toLocaleTimeString());
 }
 
-/** Pre-flight: one-frame request so we know whether a device is actually bound. */
+// Pre-flight: one-frame request so we know whether a device is actually bound.
 async function preflightMjpegStream(index) {
   const query = index >= 0 ? `?frames=1&index=${index}` : '?frames=1';
   try {
@@ -278,7 +267,7 @@ function toggleLiveFeed() {
   }
 }
 
-// --- RADIOMETRIC POLLING (hardware-free thermal feed) ---
+// --- Radiometric polling ---
 async function pollRadiometricFrame() {
   if (!liveActive || liveMode !== 'radiometric') return;
 
@@ -313,7 +302,7 @@ async function pollRadiometricFrame() {
   }
 }
 
-// --- SNAPSHOT TRIGGER + HAND-OFF ---
+// --- Snapshot trigger and hand-off ---
 async function triggerSnapshotAndAnalyze() {
   const panel = document.getElementById('liveCaptureResult');
   const waitSeconds = 4;
@@ -332,26 +321,26 @@ async function triggerSnapshotAndAnalyze() {
     if (panel) {
       panel.innerHTML = `
         <div class="space-y-1">
-          <div class="text-emerald-400 font-bold">CAPTURE RECEIVED</div>
-          <div>File: <span class="text-slate-200">${payload.filename}</span></div>
-          <div>Size: <span class="text-slate-200">${payload.width} x ${payload.height}</span></div>
-          <div>Range: <span class="text-slate-200">${payload.min_temp} .. ${payload.max_temp} \u00B0C</span></div>
-          <div>Trigger: <span class="text-slate-200">${payload.trigger}</span>${payload.externalCommandError
-            ? ` <span class="text-amber-400">(${payload.externalCommandError})</span>` : ''}</div>
+          <div class="text-neutral-700 font-bold">CAPTURE RECEIVED</div>
+          <div>File: <span class="text-neutral-900">${payload.filename}</span></div>
+          <div>Size: <span class="text-neutral-900">${payload.width} x ${payload.height}</span></div>
+          <div>Range: <span class="text-neutral-900">${payload.min_temp} .. ${payload.max_temp} \u00B0C</span></div>
+          <div>Trigger: <span class="text-neutral-900">${payload.trigger}</span>${payload.externalCommandError
+            ? ` <span class="text-neutral-700">(${payload.externalCommandError})</span>` : ''}</div>
           <div class="pt-1 flex flex-wrap gap-2">
-            <a href="index.html" class="px-2 py-1 rounded border border-slate-700 bg-slate-800 hover:bg-slate-700 text-slate-200">Ingest in workbench</a>
-            <a href="micro_inspector.html" class="px-2 py-1 rounded border border-cyan-800 bg-slate-800 hover:bg-cyan-900/40 text-cyan-400">Inspect micro-patch</a>
+            <a href="index.html" class="px-2 py-1 border border-neutral-400 bg-neutral-100 hover:bg-neutral-200 text-neutral-900">Ingest in workbench</a>
+            <a href="micro_inspector.html" class="px-2 py-1 border border-neutral-400 bg-neutral-100 hover:bg-neutral-200 text-neutral-700">Inspect micro-patch</a>
           </div>
         </div>`;
     }
   } catch (err) {
     setLiveState(liveActive ? `streaming (${liveMode})` : 'idle');
     logLive(`Snapshot failed: ${err.message}`, 'error');
-    if (panel) panel.innerHTML = `<span class="text-rose-400">Snapshot failed: ${err.message}</span>`;
+    if (panel) panel.innerHTML = `<span class="text-neutral-700">Snapshot failed: ${err.message}</span>`;
   }
 }
 
-// --- DEVICE PROBE ---
+// --- Device probe ---
 async function probeStreamDevices() {
   setLiveState('probing capture devices');
   try {
@@ -377,22 +366,20 @@ async function probeStreamDevices() {
   }
 }
 
-// --- UVC CAPABILITY PROBE ---
-// Answers "is this camera UVC, and what does the stream carry?" from the collector host's own
-// evidence: negotiated fourcc, USB interface class, advertised pixel formats and controls.
+// --- UVC capability probe: negotiated fourcc, interface class, formats, controls ---
 const LIVE_PIXEL_CLASS_LABEL = {
-  'radiometric-16-bit': { text: 'RADIOMETRIC 16-bit', cls: 'text-emerald-400' },
-  '8-bit-viewfinder': { text: '8-bit viewfinder', cls: 'text-amber-400' },
-  'metadata-only': { text: 'metadata node', cls: 'text-slate-400' },
-  unknown: { text: 'format unknown', cls: 'text-slate-500' }
+  'radiometric-16-bit': { text: 'RADIOMETRIC 16-bit', cls: 'text-neutral-700' },
+  '8-bit-viewfinder': { text: '8-bit viewfinder', cls: 'text-neutral-700' },
+  'metadata-only': { text: 'metadata node', cls: 'text-neutral-600' },
+  unknown: { text: 'format unknown', cls: 'text-neutral-500' }
 };
 
 const LIVE_VERDICT_LABEL = {
-  'scenario-b-radiometric-y16': { title: 'SCENARIO B - 16-BIT RADIOMETRIC FORMATS', cls: 'text-emerald-400', level: 'ok' },
-  'scenario-a-8-bit-viewfinder': { title: 'SCENARIO A - 8-BIT VIEWFINDER ONLY', cls: 'text-amber-400', level: 'warn' },
-  'metadata-nodes-only': { title: 'METADATA NODES ONLY - NO IMAGE STREAM', cls: 'text-amber-400', level: 'warn' },
-  'no-capture-device': { title: 'NO VIDEO CAPTURE DEVICE ON THIS HOST', cls: 'text-slate-300', level: 'warn' },
-  'capture-device-unclassified': { title: 'CAPTURE DEVICE - FORMAT NOT REPORTED', cls: 'text-slate-300', level: 'info' }
+  'scenario-b-radiometric-y16': { title: 'SCENARIO B - 16-BIT RADIOMETRIC FORMATS', cls: 'text-neutral-700', level: 'ok' },
+  'scenario-a-8-bit-viewfinder': { title: 'SCENARIO A - 8-BIT VIEWFINDER ONLY', cls: 'text-neutral-700', level: 'warn' },
+  'metadata-nodes-only': { title: 'METADATA NODES ONLY - NO IMAGE STREAM', cls: 'text-neutral-700', level: 'warn' },
+  'no-capture-device': { title: 'NO VIDEO CAPTURE DEVICE ON THIS HOST', cls: 'text-neutral-800', level: 'warn' },
+  'capture-device-unclassified': { title: 'CAPTURE DEVICE - FORMAT NOT REPORTED', cls: 'text-neutral-800', level: 'info' }
 };
 
 // Device names and control names come from USB descriptors and kernel drivers, so they are
@@ -406,23 +393,23 @@ function escapeLiveValue(value) {
     .replace(/'/g, '&#39;');
 }
 
-/** Pixel-class badge; unrecognised formats stay "unknown" instead of being guessed at. */
+// Pixel-class badge; unrecognised formats stay "unknown" instead of being guessed at.
 function livePixelClassMarkup(pixelClass) {
   const known = LIVE_PIXEL_CLASS_LABEL[pixelClass] || LIVE_PIXEL_CLASS_LABEL.unknown;
   return `<span class="${known.cls}">${known.text}</span>`;
 }
 
-/** Renders a capability-probe payload. Pure (no DOM access), so it can be verified directly. */
+// Renders a capability-probe payload. Pure (no DOM access), so it can be verified directly.
 function buildLiveCapabilitiesHtml(payload) {
   const caps = payload && payload.capabilities;
   if (!caps) {
-    return `<div class="text-amber-400">This collector answered without a capability block - restart it with the ` +
-      `updated <span class="text-slate-300">live_stream_driver.py</span>.</div>`;
+    return `<div class="text-neutral-700">This collector answered without a capability block - restart it with the ` +
+      `updated <span class="text-neutral-800">live_stream_driver.py</span>.</div>`;
   }
 
   const summary = caps.summary || {};
   const verdict = LIVE_VERDICT_LABEL[summary.verdict] ||
-    { title: String(summary.verdict || 'unknown verdict'), cls: 'text-slate-300' };
+    { title: String(summary.verdict || 'unknown verdict'), cls: 'text-neutral-800' };
   const devices = caps.devices || [];
 
   const rows = devices.map(device => {
@@ -442,71 +429,64 @@ function buildLiveCapabilitiesHtml(payload) {
       `<div class="pl-2">${escapeLiveValue(format.fourcc || '?')} &mdash; ${escapeLiveValue(format.description || 'no description')} ` +
       `[${livePixelClassMarkup(format.pixelClass)}]${format.sizes && format.sizes.length ? ' ' + escapeLiveValue(format.sizes.join(', ')) : ''}` +
       `${format.frameRates && format.frameRates.length ? ' @ ' + escapeLiveValue(format.frameRates.join(', ')) + ' fps' : ''}</div>`
-    ).join('') || `<div class="pl-2 text-slate-500">${escapeLiveValue(v4l2.reason || (v4l2.errors && v4l2.errors[0]) || 'no formats reported')}</div>`;
+    ).join('') || `<div class="pl-2 text-neutral-500">${escapeLiveValue(v4l2.reason || (v4l2.errors && v4l2.errors[0]) || 'no formats reported')}</div>`;
 
     const xu = (((v4l2.controls || {}).xuCandidates) || []).map(control =>
-      `<div class="pl-2 text-cyan-300">${escapeLiveValue(control.name)} ` +
-      `<span class="text-slate-500">${escapeLiveValue(control.id)} ${escapeLiveValue(control.detail)}</span></div>`
+      `<div class="pl-2 text-neutral-700">${escapeLiveValue(control.name)} ` +
+      `<span class="text-neutral-500">${escapeLiveValue(control.id)} ${escapeLiveValue(control.detail)}</span></div>`
     ).join('');
 
     const frameLine = frameTest.tested
       ? (frameTest.ok === true
-        ? `<span class="text-emerald-400">frame received</span> ${escapeLiveValue((frameTest.shape || []).join('x'))} ${escapeLiveValue(frameTest.dtype)}`
+        ? `<span class="text-neutral-700">frame received</span> ${escapeLiveValue((frameTest.shape || []).join('x'))} ${escapeLiveValue(frameTest.dtype)}`
         : (frameTest.ok === false
-          ? `<span class="text-rose-400">no frame</span> ${escapeLiveValue(frameTest.reason)}`
-          : `<span class="text-amber-400">no verdict</span> ${escapeLiveValue(frameTest.reason)}`))
-      : `<span class="text-slate-500">not tested</span> ${escapeLiveValue(frameTest.reason)}`;
+          ? `<span class="text-neutral-700">no frame</span> ${escapeLiveValue(frameTest.reason)}`
+          : `<span class="text-neutral-700">no verdict</span> ${escapeLiveValue(frameTest.reason)}`))
+      : `<span class="text-neutral-500">not tested</span> ${escapeLiveValue(frameTest.reason)}`;
 
     return `
-      <div class="pt-2 border-t border-slate-800">
-        <div class="text-slate-200">index ${escapeLiveValue(device.index)} via ${escapeLiveValue(device.backend)}${device.node ? ' &mdash; ' + escapeLiveValue(device.node) : ''}${device.opened === false ? ' <span class="text-rose-400">did not open</span>' : ''}</div>
-        <div>Format: ${device.fourcc ? escapeLiveValue(device.fourcc) : '<span class="text-slate-500">not reported</span>'} ${livePixelClassMarkup(device.pixelClass)}${device.width ? ' &middot; ' + escapeLiveValue(device.width + ' x ' + device.height) : ''}${device.fps ? ' @ ' + escapeLiveValue(device.fps) + ' fps' : ''}</div>
+      <div class="pt-2 border-t border-neutral-300">
+        <div class="text-neutral-900">index ${escapeLiveValue(device.index)} via ${escapeLiveValue(device.backend)}${device.node ? ' &mdash; ' + escapeLiveValue(device.node) : ''}${device.opened === false ? ' <span class="text-neutral-700">did not open</span>' : ''}</div>
+        <div>Format: ${device.fourcc ? escapeLiveValue(device.fourcc) : '<span class="text-neutral-500">not reported</span>'} ${livePixelClassMarkup(device.pixelClass)}${device.width ? ' &middot; ' + escapeLiveValue(device.width + ' x ' + device.height) : ''}${device.fps ? ' @ ' + escapeLiveValue(device.fps) + ' fps' : ''}</div>
         <div>Frame test: ${frameLine}</div>
         <div>USB: ${usb}</div>
         <div>Interface class: ${interfaceClass}</div>
         <div>Advertised formats:${formats}</div>
-        ${v4l2.captureType ? `<div>Capture type: ${escapeLiveValue(v4l2.captureType)}${v4l2.isMetadataNode ? ' <span class="text-amber-400">(metadata node: opens, never streams)</span>' : ''}</div>` : ''}
+        ${v4l2.captureType ? `<div>Capture type: ${escapeLiveValue(v4l2.captureType)}${v4l2.isMetadataNode ? ' <span class="text-neutral-700">(metadata node: opens, never streams)</span>' : ''}</div>` : ''}
         ${xu ? `<div>XU / vendor control candidates:${xu}</div>` : ''}
-        ${frameTest.rawDepthHint ? `<div class="text-emerald-400">${escapeLiveValue(frameTest.rawDepthHint)}</div>` : ''}
+        ${frameTest.rawDepthHint ? `<div class="text-neutral-700">${escapeLiveValue(frameTest.rawDepthHint)}</div>` : ''}
       </div>`;
   }).join('');
 
   const notes = (summary.notes || [])
-    .map(note => `<div class="pl-2 text-slate-500">- ${escapeLiveValue(note)}</div>`)
+    .map(note => `<div class="pl-2 text-neutral-500">- ${escapeLiveValue(note)}</div>`)
     .join('');
 
-  // The host's own camera policy: a denied policy and a wedged device produce the same evidence,
-  // and this is the only line that can tell the operator which one they are looking at.
+  // Distinguishes a denied camera policy from a wedged device.
   const access = caps.hostCameraAccess || {};
   const accessLine = access.checked
     ? (access.blocked
-      ? `<span class="text-rose-400">host camera access: denied</span> ` +
-        `<span class="text-slate-500">(desktop apps ${escapeLiveValue(access.desktopApps || 'unknown')} &middot; user ${escapeLiveValue(access.userConsent || 'unset')} &middot; machine ${escapeLiveValue(access.machineConsent || 'unset')} &mdash; grant access in Windows privacy settings before blaming the device)</span>`
-      : `<span class="text-emerald-400">host camera access: allowed</span> ` +
-        `<span class="text-slate-500">(desktop apps ${escapeLiveValue(access.desktopApps || 'unset')})</span>`)
-    : `<span class="text-slate-500">host camera access: not checked${access.note ? ' &mdash; ' + escapeLiveValue(access.note) : ''}</span>`;
+      ? `<span class="text-neutral-700">host camera access: denied</span> ` +
+        `<span class="text-neutral-500">(desktop apps ${escapeLiveValue(access.desktopApps || 'unknown')} &middot; user ${escapeLiveValue(access.userConsent || 'unset')} &middot; machine ${escapeLiveValue(access.machineConsent || 'unset')} &mdash; grant access in Windows privacy settings before blaming the device)</span>`
+      : `<span class="text-neutral-700">host camera access: allowed</span> ` +
+        `<span class="text-neutral-500">(desktop apps ${escapeLiveValue(access.desktopApps || 'unset')})</span>`)
+    : `<span class="text-neutral-500">host camera access: not checked${access.note ? ' &mdash; ' + escapeLiveValue(access.note) : ''}</span>`;
 
   return `
     <div class="${verdict.cls} font-bold">${escapeLiveValue(verdict.title)}</div>
-    <div class="text-slate-300 pt-1">${escapeLiveValue(summary.meaning || '')}</div>
-    <div class="pt-1 text-slate-500">UVC interface present: ${summary.uvcInterfacePresent ? 'yes' : 'no'} &middot; capture devices: ${escapeLiveValue(summary.captureDeviceCount)} &middot; metadata nodes: ${escapeLiveValue(summary.metadataNodeCount)}</div>
+    <div class="text-neutral-800 pt-1">${escapeLiveValue(summary.meaning || '')}</div>
+    <div class="pt-1 text-neutral-500">UVC interface present: ${summary.uvcInterfacePresent ? 'yes' : 'no'} &middot; capture devices: ${escapeLiveValue(summary.captureDeviceCount)} &middot; metadata nodes: ${escapeLiveValue(summary.metadataNodeCount)}</div>
     ${caps.hostCameraAccess ? `<div>${accessLine}</div>` : ''}
-    <div class="text-slate-500">platform ${escapeLiveValue(caps.platform)} &middot; v4l2-ctl: ${caps.v4l2Tool ? escapeLiveValue(caps.v4l2Tool) : 'not available'} &middot; read test: ${caps.readTest ? 'on' : 'off'} &middot; scanned ${escapeLiveValue(caps.probeLimit)} index(es) in ${escapeLiveValue(caps.scanSeconds)}s${caps.scanTruncated ? ' <span class="text-amber-400">(scan stopped at the time budget)</span>' : ''}${caps.cached ? ' <span class="text-slate-400">(cached, ' + escapeLiveValue(caps.cacheAgeSeconds) + 's old - press again for a fresh sweep)</span>' : ''}</div>
-    ${rows || '<div class="pt-2 text-slate-500">No capture index opened on the collector host.</div>'}
-    ${notes ? `<div class="pt-2 border-t border-slate-800">${notes}</div>` : ''}`;
+    <div class="text-neutral-500">platform ${escapeLiveValue(caps.platform)} &middot; v4l2-ctl: ${caps.v4l2Tool ? escapeLiveValue(caps.v4l2Tool) : 'not available'} &middot; read test: ${caps.readTest ? 'on' : 'off'} &middot; scanned ${escapeLiveValue(caps.probeLimit)} index(es) in ${escapeLiveValue(caps.scanSeconds)}s${caps.scanTruncated ? ' <span class="text-neutral-700">(scan stopped at the time budget)</span>' : ''}${caps.cached ? ' <span class="text-neutral-600">(cached, ' + escapeLiveValue(caps.cacheAgeSeconds) + 's old - press again for a fresh sweep)</span>' : ''}</div>
+    ${rows || '<div class="pt-2 text-neutral-500">No capture index opened on the collector host.</div>'}
+    ${notes ? `<div class="pt-2 border-t border-neutral-300">${notes}</div>` : ''}`;
 }
 
-/**
- * Asks the collector host what video interfaces exist and what they carry, then reports the
- * verdict in the panel, the log and the telemetry state. Nothing here changes the source
- * mode: a probe is evidence, so the operator decides what to do with it.
- */
 async function probeStreamCapabilities() {
   const panel = document.getElementById('liveCapabilities');
   const readTestEl = document.getElementById('liveReadTest');
   const readTest = !!(readTestEl && readTestEl.checked);
-  // A second click is an explicit request for a new measurement, so it bypasses the collector's
-  // re-probe guard: probing is the one action here that can disturb the device stack.
+  // Explicit re-probe: probing is the one action that can disturb the device stack.
   const fresh = liveLastProbeCached ? 'true' : 'false';
 
   setLiveState('probing capabilities');
@@ -562,7 +542,7 @@ async function probeStreamCapabilities() {
     setLiveState(liveActive ? `streaming (${liveMode})` : 'idle');
   } catch (err) {
     setLiveState(liveActive ? `streaming (${liveMode})` : 'idle');
-    if (panel) panel.innerHTML = `<span class="text-rose-400">Capability probe failed: ` +
+    if (panel) panel.innerHTML = `<span class="text-neutral-700">Capability probe failed: ` +
       `${escapeLiveValue(err.message)}</span>`;
     logLive(`Capability probe failed: ${err.message}`, 'error');
   }
