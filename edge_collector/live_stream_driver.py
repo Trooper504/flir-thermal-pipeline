@@ -1,34 +1,5 @@
 # edge_collector/live_stream_driver.py
-"""Live viewfinder streaming + snapshot coordination for the FLIR E8-XT workstation.
 
-HARDWARE REALITY (read before demoing)
---------------------------------------
-* The FLIR E-series (E4 .. E8-XT) is a *mass-storage* instrument. It does not present a
-  UVC / DirectShow / V4L2 video interface, so ``cv2.VideoCapture()`` will not enumerate
-  it. On a typical dev workstation the only capture device is the built-in webcam, and
-  binding index 0 would therefore stream *your laptop camera*, not thermal imagery.
-* Live view from these cameras is reachable only through FLIR's own paths (composite
-  video out where fitted, or FLIR software over Wi-Fi/USB), none of which OpenCV opens.
-* The shutter / NUC trigger cannot be commanded over USB mass storage either, and
-  unbinding the USB storage interface (uhubctl / sysfs) would merely power-cycle the SD
-  reader that album ingestion depends on - it cannot fire a shutter.
-
-Consequences for this module:
-* Real MJPEG plumbing is implemented, but device selection is *explicit* (``FLIR_VIDEO_INDEX``
-  env var, the ``index=`` / ``backend=`` query params, or the UI picker) and every
-  response states which device was locked.
-* When no suitable device exists, ``/api/v1/stream/live-mjpeg`` answers HTTP 503 and the
-  webapp falls back to radiometric polling of ``/api/v1/thermal-frame`` - real thermal
-  data at 9 Hz with no video hardware required.
-* ``coordinate_snapshot()`` performs a safe software capture and can additionally run an
-  external trigger command (``FLIR_TRIGGER_CMD``) for a lab that has wired a hardware
-  trigger to the camera; it never touches USB power or sysfs.
-* ``probe_capabilities()`` answers the "is it UVC after all?" question with evidence
-  instead of assumption: the fourcc OpenCV negotiated, the USB interface class behind
-  ``/dev/videoN`` (0x0e == USB Video Class), and the pixel formats / control list that
-  ``v4l2-ctl`` advertises - including whether a node is a *metadata* node that opens and
-  never streams. Exposed as ``GET /api/v1/stream/devices?capabilities=true``.
-"""
 import json
 import os
 import re
@@ -73,29 +44,22 @@ V4L2_TOOL_NAME = "v4l2-ctl"
 V4L2_TOOL_ENV = "V4L2_CTL_PATH"
 V4L2_TIMEOUT_SECONDS = 6.0
 
-# Probes are diagnostics, so the read test is bounded by running it in a *separate process*: an
-# OpenCV capture cannot be interrupted from inside the interpreter, and abandoning one in-process
-# was tried and rejected - the capture is still used/released by the blocked call, which wedged
-# the collector and then took the whole process down (observed with DirectShow). A child process
-# makes ``subprocess`` free to kill it, and a crashing camera backend cannot reach the API. The
-# timeout is generous because the child has to start a Python interpreter and import OpenCV.
+# The read test runs in a child process: a blocked OpenCV capture cannot be interrupted from
+# inside the interpreter, but subprocess can kill the child. The timeout allows for interpreter
+# start-up plus the OpenCV import.
 READ_TEST_TIMEOUT_SECONDS = 20.0
 DEFAULT_SCAN_BUDGET_SECONDS = 20.0
 
-# Opening every candidate index is not free, and repeatedly opening and closing the same devices
-# can wedge some camera stacks (observed on Windows: the third consecutive probe of the same host
-# stopped answering, with no read test involved). A short guard makes a repeated probe idempotent,
-# so a double-clicked button cannot hammer the device stack; ``fresh=True`` (``?fresh=true``)
+# Repeated probes can wedge some camera stacks, so a short cache makes them idempotent;
+# ``fresh=True`` (``?fresh=true``) forces a new measurement.
 # bypasses it when a genuinely new measurement is wanted.
 CAPABILITY_CACHE_SECONDS = 10.0
 
-# Sentinel returned by an index inspection that ran out of scan budget, so "no device here"
-# and "we stopped looking" never get confused. The scan budget is deliberately *soft*: it stops
-# starting new work, but an index already in progress cannot be interrupted (see above).
+# Returned when an index was never inspected because the scan budget ran out.
+# The budget is soft: it stops new work, it does not interrupt work in progress.
 SCAN_TRUNCATED = object()
 
-# Child program for the frame-read test. Kept dependency-free on purpose: standard library plus
-# cv2 only, because it runs in its own interpreter with the collector's own virtualenv.
+# Child program for the frame-read test: standard library plus cv2, nothing else.
 READ_TEST_SNIPPET = (
     "import json, sys\n"
     "import cv2\n"
@@ -113,9 +77,8 @@ READ_TEST_SNIPPET = (
     "print(json.dumps(result))\n"
 )
 
-# V4L2 fourccs grouped by what they mean for this project. ``GREY`` is deliberately
-# listed as 8-bit: V4L2_PIX_FMT_GREY is one byte per pixel, not detector counts. The
-# DirectShow naming of the same 8-bit layouts (YUY2 and friends) is listed alongside them.
+# V4L2 fourccs by what they mean here. ``GREY`` is 8-bit: one byte per pixel, no detector
+# counts. The DirectShow names of the same layouts (YUY2 and friends) sit alongside.
 RADIOMETRIC_FOURCCS = ("Y16", "Y16_LE", "Y12", "Y14", "RAW16", "UY16")
 VIEWFINDER_FOURCCS = ("YUYV", "YUY2", "UYVY", "MJPG", "JPEG", "RGB3", "BGR3", "RGB4", "BGR4",
                       "NV12", "NV21", "GREY", "Y8", "BA81", "H264", "MPG4",
@@ -127,8 +90,8 @@ PIXEL_CLASS_VIEWFINDER = "8-bit-viewfinder"
 PIXEL_CLASS_METADATA = "metadata-only"
 PIXEL_CLASS_UNKNOWN = "unknown"
 
-# Standard V4L2 control sections. Anything else in the control list is vendor-defined,
-# which is exactly where UVC extension-unit (XU) commands such as shutter / FFC appear.
+# Standard V4L2 control sections; anything else is vendor-defined, which is where UVC
+# extension-unit (XU) commands such as shutter / FFC appear.
 STANDARD_CONTROL_SECTIONS = (
     "user controls", "camera controls", "codec controls", "image source controls",
     "image processing controls", "video capture controls", "jpeg compression controls",
@@ -157,12 +120,7 @@ UVC_INTERFACE_SUBCLASS_NAMES = {
 
 
 def decode_fourcc(value) -> str:
-    """Decodes an OpenCV ``CAP_PROP_FOURCC`` number into its 4-character code.
-
-    Backends pack the code little-endian into an integer, and some report 0 or a value
-    that is not printable text at all; both are answered with ``""`` instead of control
-    characters, so a caller can tell "no format reported" from a real format.
-    """
+    """Decodes an OpenCV ``CAP_PROP_FOURCC`` number into its 4-character code."""
     try:
         raw = int(value)
     except (TypeError, ValueError):
@@ -179,12 +137,7 @@ def normalize_fourcc(code) -> str:
 
 
 def classify_pixel_format(code) -> str:
-    """Maps a fourcc to the only distinction that matters here: can it carry temperature?
-
-    ``GREY`` is 8-bit, ``YUYV``/``MJPG`` are 8-bit-per-channel viewfinder formats, and
-    only ``Y16``/``Y12``/``Y14``/``RAW16`` carry raw microbolometer counts. A format that
-    is not recognised stays ``unknown`` rather than being guessed at.
-    """
+    """Maps a fourcc to the only distinction that matters here: can it carry temperature?"""
     key = normalize_fourcc(code)
     if not key:
         return PIXEL_CLASS_UNKNOWN
@@ -206,11 +159,7 @@ def find_v4l2_ctl():
 
 
 def run_inspection_tool(args, timeout=V4L2_TIMEOUT_SECONDS) -> dict:
-    """Runs an external inspection command without a shell. Never raises.
-
-    A probe is diagnostic, so a missing binary, a slow device or a permission problem is
-    returned as data for the caller to report - it must not take the API down.
-    """
+    """Runs an external inspection command without a shell. Never raises."""
     try:
         completed = subprocess.run(
             args, shell=False, timeout=timeout,
@@ -248,13 +197,7 @@ def sysfs_node_for_index(index) -> str:
 
 
 def read_sysfs_usb_identity(node) -> dict:
-    """Reads the USB identity behind a ``/dev/videoN`` node from sysfs.
-
-    ``bInterfaceClass`` 0x0e *is* USB Video Class, so this is the descriptor-level answer
-    to "is it UVC at all?": a composite instrument can mount as a disk and still carry no
-    Video-class interface, and no product string changes that. Returns None off Linux or
-    when the node has no sysfs entry.
-    """
+    """Reads the USB identity behind a ``/dev/videoN`` node from sysfs."""
     if not node:
         return None
     link = os.path.join("/sys/class/video4linux", os.path.basename(str(node)), "device")
@@ -285,36 +228,20 @@ def read_sysfs_usb_identity(node) -> dict:
 
 
 # ---------------------------------------------------------------------------
-# Host camera-access policy
-#
-# An operating system can refuse a camera to a desktop app *without* failing the open: the capture
-# is created, the read simply never returns. From inside OpenCV that is indistinguishable from
-# wedged hardware, which is how a host with camera access switched off burns a whole read-test
-# timeout and then looks like a broken camera. The policy is therefore read from the host's own
-# consent store instead of from the device - free, and incapable of wedging anything.
+# Host camera-access policy: a denied camera looks like wedged hardware (the open
+# succeeds, the read never returns), so read the OS consent store, not the device.
 # ---------------------------------------------------------------------------
 WINDOWS_CAMERA_CONSENT_KEY = (
     r"SOFTWARE\Microsoft\Windows\CurrentVersion\CapabilityAccessManager\ConsentStore"
 )
 WINDOWS_CAMERA_APP_KEY = "webcam"
-# "Let desktop apps access your camera". OpenCV is a classic Win32 app, so this is the value that
-# governs it, while the two parent values can deny the camera outright.
+# "Let desktop apps access your camera" governs OpenCV; the two parent values can deny it.
 WINDOWS_DESKTOP_APPS_KEY = "NonPackaged"
 CAMERA_ACCESS_DENIED = "Deny"
 
 
 def host_camera_access() -> dict:
-    """Reports the *host's* camera-access policy without opening a device.
-
-    On Windows camera access is per-app policy (`Settings > Privacy & security > Camera`) and a
-    denied policy presents exactly like broken hardware: ``cv2.VideoCapture`` opens, and no frame
-    ever arrives. Three registry values decide it and a ``Deny`` at any level denies the stream, so
-    all of them are reported rather than collapsed into one guess. ``blocked`` is only ever ``True``
-    when a ``Deny`` was actually read; ``None`` means "could not tell", which is not a verdict.
-
-    Off Windows - or if the registry cannot be read - the answer is ``checked: False``. This is a
-    diagnostic, so it may never fail a probe.
-    """
+    """Reports the *host's* camera-access policy without opening a device."""
     access = {
         "platform": sys.platform,
         "checked": False,
@@ -380,11 +307,7 @@ def host_camera_access() -> dict:
 
 
 def parse_v4l2_formats_ext(text) -> dict:
-    """Parses ``v4l2-ctl -d NODE --list-formats-ext`` output.
-
-    The ``Type:`` line is the part that catches a UVC *metadata* node: it opens happily and
-    then never delivers a frame, which would otherwise stop the MJPEG route mid-stream.
-    """
+    """Parses ``v4l2-ctl -d NODE --list-formats-ext`` output."""
     capture_type = ""
     formats = []
     current = None
@@ -438,13 +361,7 @@ def parse_v4l2_formats_ext(text) -> dict:
 
 
 def parse_v4l2_controls(text) -> dict:
-    """Parses ``v4l2-ctl -d NODE -l`` output into sections and individual controls.
-
-    ``xuCandidates`` is a *heuristic* shortlist, not proof. UVC extension units (shutter /
-    FFC / palette) surface as controls inside a section named after the vendor rather than
-    in a standard V4L2 section, so those are flagged for a human to read before anything is
-    wired to ``FLIR_TRIGGER_CMD``.
-    """
+    """Parses ``v4l2-ctl -d NODE -l`` output into sections and individual controls."""
     sections = []
     current = None
 
@@ -491,15 +408,7 @@ def parse_v4l2_controls(text) -> dict:
 
 
 def summarize_capabilities(devices, truncated=False, camera_access=None) -> dict:
-    """Turns per-index evidence into the one verdict the UI needs to show.
-
-    Verdicts are deliberately blunt: "no capture device" and "8-bit viewfinder" are both
-    perfectly valid answers for this project, and neither is treated as a failure.
-
-    ``camera_access`` is the host's own camera policy (see ``host_camera_access``). It is passed in
-    because a host that refuses access and a device that has wedged produce identical evidence, and
-    only the policy can tell the two apart.
-    """
+    """Turns per-index evidence into the one verdict the UI needs to show."""
     entries = list(devices or [])
     uvc_present = any((entry.get("sysfs") or {}).get("isUsbVideoClass") for entry in entries)
 
@@ -507,11 +416,7 @@ def summarize_capabilities(devices, truncated=False, camera_access=None) -> dict
         return entry.get("v4l2") or {}
 
     def classes_of(entry):
-        """Pixel classes from every source: v4l2-ctl when present, OpenCV's fourcc always.
-
-        On Windows there is no v4l2-ctl, so the negotiated fourcc is the only evidence there
-        is - leaving it out would report a plainly 8-bit device as "unclassified".
-        """
+        """Pixel classes from every source: v4l2-ctl when present, OpenCV's fourcc always."""
         classes = list(v4l2_of(entry).get("pixelClasses") or [])
         opencv_class = entry.get("pixelClass")
         if opencv_class and opencv_class != PIXEL_CLASS_UNKNOWN and opencv_class not in classes:
@@ -567,9 +472,8 @@ def summarize_capabilities(devices, truncated=False, camera_access=None) -> dict
         if sys.platform.startswith("linux"):
             notes.append("Advertised pixel formats are unknown because v4l2-ctl was not available "
                          "(install v4l-utils: `sudo apt install v4l-utils`).")
-        # Off Linux there is no v4l2-ctl at all, so the platform note below carries that instead.
-    # A host that denies camera access and a device that never answers look the same from here, so
-    # the policy is named when it is the explanation rather than letting the verdict imply hardware.
+        # Off Linux there is no v4l2-ctl; a denied camera and a dead device look identical here, so
+        # the policy is named whenever it is the explanation.
     access = camera_access or {}
     if access.get("blocked"):
         stalled = [entry["index"] for entry in entries
@@ -600,15 +504,7 @@ def summarize_capabilities(devices, truncated=False, camera_access=None) -> dict
 
 
 def process_frame_test(index, backend_name, timeout=READ_TEST_TIMEOUT_SECONDS) -> dict:
-    """Reads one frame in a *child process* so a wedged backend can be killed for real.
-
-    In-process abandonment was tried first and rejected: an OpenCV capture cannot be interrupted,
-    and releasing it from elsewhere while the blocked call still uses it wedged the collector and
-    then brought the process down (DirectShow). Here the read runs in its own interpreter, so
-    ``subprocess`` kills it on timeout, a crashing camera backend cannot reach the API, and no
-    device handle leaks into the collector. On timeout the result is ``ok: None`` - evidence was
-    not obtained, which is not the same as a failed device.
-    """
+    """Reads one frame in a *child process* so a wedged backend can be killed for real."""
     try:
         completed = subprocess.run(
             [sys.executable, "-c", READ_TEST_SNIPPET, str(int(index)), str(backend_name)],
@@ -626,7 +522,7 @@ def process_frame_test(index, backend_name, timeout=READ_TEST_TIMEOUT_SECONDS) -
         return {"ok": False, "reason": stderr[-1][:300] if stderr
                 else f"reader process exited with {completed.returncode}"}
 
-    # OpenCV prints warnings to stderr, so only stdout is parsed - and tolerantly, because a
+    # Only stdout is parsed (OpenCV logs to stderr), tolerantly: a
     # backend may add noise of its own.
     payload = None
     for line in reversed((completed.stdout or b"").decode(errors="replace").splitlines()):
@@ -730,12 +626,7 @@ class LiveStreamDriver:
 
     # ---------------- capability probe ----------------
     def _inspect_v4l2(self, node) -> dict:
-        """Asks v4l2-ctl which formats and controls a node advertises (Linux only).
-
-        Every failure is reported as data: a missing v4l-utils package, a metadata node that
-        rejects ``-l``, or a device that does not answer within the timeout all leave the
-        rest of the probe intact.
-        """
+        """Asks v4l2-ctl which formats and controls a node advertises (Linux only)."""
         tool = find_v4l2_ctl()
         if not node:
             return {"available": False, "tool": tool,
@@ -761,12 +652,7 @@ class LiveStreamDriver:
         }
 
     def _frame_test(self, index, backend_name, read_test) -> dict:
-        """Decides whether to run the frame-read test, and reports its provenance.
-
-        The read itself happens in a child process (see ``process_frame_test``). It stays opt-in
-        because it is the only part of the probe that touches the stream, and it is skipped when a
-        live MJPEG stream already owns that index.
-        """
+        """Decides whether to run the frame-read test, and reports its provenance."""
         if not read_test:
             return {"tested": False, "ok": None,
                     "reason": "not requested (?read_test=true reads one frame per index)"}
@@ -778,8 +664,8 @@ class LiveStreamDriver:
 
         outcome = process_frame_test(index, backend_name)
         if outcome.get("ok") is None:
-            # "nothing arrived within the timeout" has two possible causes that look identical from
-            # in here, so the host policy is named whenever it is the real one.
+            # "Nothing arrived" has two causes that look identical from here; name the policy when
+            # it is the real one.
             access = self._host_access if self._host_access is not None else host_camera_access()
             if access.get("blocked"):
                 outcome = {**outcome, "reason": (
@@ -788,12 +674,7 @@ class LiveStreamDriver:
         return {"tested": True, **outcome}
 
     def _describe_index(self, index, read_test=False):
-        """Opens one index, describes it, releases it, and returns the entry (or None).
-
-        Nothing here can be interrupted from outside, which is why nothing here is abandoned:
-        the frame-read test (the only part that can genuinely block) runs in a child process
-        after this capture has been released.
-        """
+        """Opens one index, describes it, releases it, and returns the entry (or None)."""
         node = "" if os.name == "nt" else sysfs_node_for_index(index)
 
         for name, flag in available_backends():
@@ -832,8 +713,8 @@ class LiveStreamDriver:
                 if cap is not None:
                     cap.release()
 
-            # The capture is closed before the reader process opens the same device: two openers
-            # on one DirectShow device is exactly the contention that made the in-process version
+            # Close the capture before the child opens the same device: two openers on one
+            # DirectShow device is the contention that wedged the collector.
             # of this test unsafe.
             entry["frameTest"] = self._frame_test(index, name, read_test)
             return entry
@@ -848,27 +729,7 @@ class LiveStreamDriver:
 
     def probe_capabilities(self, max_index=None, read_test=False, budget_seconds=None,
                            fresh=False) -> dict:
-        """Reports which video interfaces this host really has, and what they carry.
-
-        Three independent sources, so the verdict does not rest on a single API:
-          1. OpenCV   - which indexes open, with resolution / frame rate / fourcc,
-          2. sysfs    - the USB interface class behind ``/dev/videoN`` (0x0e == Video Class),
-          3. v4l2-ctl - every advertised pixel format, whether the node is a *metadata* node,
-                        and the full control list (a vendor section is where UVC XU lives).
-
-        A fourth source needs no device at all: the host's own camera-access policy
-        (``host_camera_access``), because an operating system that refuses a camera to desktop apps
-        does it in a way that is indistinguishable from broken hardware - the open succeeds and no
-        frame ever arrives.
-
-        ``read_test=True`` additionally reads one frame per index, in a child process that
-        ``subprocess`` can kill if the device wedges (see ``process_frame_test``). The sweep itself
-        is bounded by ``budget_seconds`` (default ``DEFAULT_SCAN_BUDGET_SECONDS``), because opening
-        every candidate index on every backend is genuinely slow on some platforms. Repeating the
-        same probe within ``CAPABILITY_CACHE_SECONDS`` answers from the previous result (marked
-        ``cached: True``) unless ``fresh=True``: probing is the one thing here that can disturb the
-        device stack, so it should not be done twice by accident.
-        """
+        """Reports which video interfaces this host really has, and what they carry."""
         limit = max(1, int(max_index or self.probe_limit))
         budget = float(budget_seconds) if budget_seconds and float(budget_seconds) > 0 \
             else DEFAULT_SCAN_BUDGET_SECONDS
@@ -988,11 +849,7 @@ class LiveStreamDriver:
 
     # ---------------- MJPEG streaming ----------------
     def mjpeg_generator(self, boundary=b"frame", max_frames=None):
-        """Yields multipart/x-mixed-replace chunks at the configured frame rate.
-
-        A single viewer owns the device at a time; a second concurrent request gets an
-        empty stream rather than fighting over the capture handle.
-        """
+        """Yields multipart/x-mixed-replace chunks at the configured frame rate."""
         if self._streaming.is_set():
             return
         self._streaming.set()
@@ -1052,11 +909,7 @@ class LiveStreamDriver:
 
 
 def normalize_frame(result) -> dict:
-    """Normalises a driver capture into the standard {name, mtime, width, height, data}.
-
-    RealFlirCamera returns that dict, while MockFlirCamera returns a bare ndarray, and
-    the trigger endpoint must not care which driver it is talking to.
-    """
+    """Normalises a driver capture into the standard {name, mtime, width, height, data}."""
     if isinstance(result, dict):
         matrix = np.asarray(result["data"], dtype=np.float32)
         frame = dict(result)
@@ -1077,20 +930,7 @@ def normalize_frame(result) -> dict:
 
 
 def coordinate_snapshot(camera, wait_seconds=4.0, external_command=None) -> dict:
-    """Captures a fresh radiometric frame and returns it with provenance.
-
-    Order of operations:
-      1. record the captures already on the card,
-      2. optionally run ``external_command`` (``FLIR_TRIGGER_CMD``) - the hook for a lab
-         that has wired a hardware trigger to the camera; it is never run unless the
-         operator configured it, and nothing here touches USB power or sysfs,
-      3. wait (bounded) for the camera to write a new file,
-      4. extract the newest sane frame through the normal radiometric pipeline.
-
-    Without an external trigger this is a software snapshot: it synchronises with the
-    card and returns whatever the camera wrote last, which is what a shutter press on
-    the instrument would have produced.
-    """
+    """Captures a fresh radiometric frame and returns it with provenance."""
     # Drivers without album listing (e.g. MockFlirCamera) cannot report new files, so the
     # wait phase is skipped rather than failing the request.
     list_files = getattr(camera, "get_all_images", None)

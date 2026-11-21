@@ -7,47 +7,48 @@
   <script src="https://cdn.tailwindcss.com"></script>
   <script src="https://cdn.plot.ly/plotly-2.27.0.min.js"></script>
 </head>
-<body class="bg-slate-950 text-slate-100 font-sans p-5 min-h-screen">
-  <!-- NAVIGATION -->
+<body class="bg-neutral-50 text-neutral-900 font-sans p-5 min-h-screen">
+  <!-- nav -->
   <header class="flex flex-wrap justify-between items-center gap-3 mb-4">
     <div>
       <h1 class="text-xl font-bold tracking-wide">FLIR Micro Inspector</h1>
-      <p class="text-xs text-slate-400 font-mono">Sub-Millimetre Particle &amp; Thermal Dynamics Studio</p>
+      <p class="text-xs text-neutral-600 font-mono">Sub-Millimetre Particle &amp; Thermal Dynamics Studio</p>
     </div>
-    <nav class="flex items-center gap-2 text-xs font-mono">
-      <a href="index.html" class="px-3 py-1.5 rounded border border-slate-700 bg-slate-900 hover:bg-slate-800 text-slate-300 transition">&larr; Workbench (album / streams)</a>
-      <a href="live.html" class="px-3 py-1.5 rounded border border-emerald-800 bg-slate-900 hover:bg-emerald-900/40 text-emerald-400 transition">Live Video &amp; Trigger Studio</a>
-      <a href="mask_studio.html" class="px-3 py-1.5 rounded border border-fuchsia-800 bg-slate-900 hover:bg-fuchsia-900/40 text-fuchsia-400 transition">Mask Studio</a>
+    <nav class="flex items-center gap-4 text-xs font-mono text-neutral-600">
+      <a href="index.html" class="hover:text-neutral-900 underline underline-offset-2">Workbench</a>
+      <a href="live.html" class="hover:text-neutral-900 underline underline-offset-2">Live Studio</a>
+      <span class="font-bold text-neutral-900">Micro Inspector</span>
+      <a href="mask_studio.html" class="hover:text-neutral-900 underline underline-offset-2">Mask Studio</a>
     </nav>
   </header>
 
-  <!-- SOURCE + ROI CONTROLS -->
-  <details class="group bg-slate-900 border border-slate-800 rounded-lg overflow-hidden mb-4" open>
-    <summary class="p-4 cursor-pointer select-none bg-slate-900 hover:bg-slate-800/60 transition text-xs font-bold uppercase tracking-wider text-slate-300 font-mono">
+  <!-- source and ROI -->
+  <details class="group bg-white border border-neutral-300 overflow-hidden mb-4" open>
+    <summary class="p-4 cursor-pointer select-none bg-white hover:bg-neutral-100 text-xs font-bold uppercase tracking-wider text-neutral-800 font-mono">
       1. Source Matrix &amp; Dynamic ROI Geometry
     </summary>
-    <div class="p-4 space-y-4 border-t border-slate-800">
+    <div class="p-4 space-y-4 border-t border-neutral-300">
       <div class="grid grid-cols-2 md:grid-cols-5 gap-3 text-xs font-mono">
         <div class="md:col-span-2">
-          <label class="block text-slate-400 mb-1">Stored Frame</label>
+          <label class="block text-neutral-600 mb-1">Stored Frame</label>
           <select id="microFrameSelect" onchange="handleMicroFrameChange(event)"
-                  class="w-full bg-slate-950 border border-slate-700 rounded px-2 py-1.5 text-slate-200 focus:outline-none focus:border-slate-500">
+                  class="w-full bg-neutral-50 border border-neutral-400 px-2 py-1.5 text-neutral-900 focus:outline-none focus:border-neutral-900">
           </select>
         </div>
         <div>
-          <label class="block text-slate-400 mb-1">ROI Width W (px)</label>
+          <label class="block text-neutral-600 mb-1">ROI Width W (px)</label>
           <input id="microRoiW" type="number" min="1" max="320" value="4" onchange="recomputeMicroAnalysis()"
-                 class="w-full bg-slate-950 border border-slate-700 rounded px-2 py-1.5 text-slate-200">
+                 class="w-full bg-neutral-50 border border-neutral-400 px-2 py-1.5 text-neutral-900">
         </div>
         <div>
-          <label class="block text-slate-400 mb-1">ROI Height H (px)</label>
+          <label class="block text-neutral-600 mb-1">ROI Height H (px)</label>
           <input id="microRoiH" type="number" min="1" max="240" value="5" onchange="recomputeMicroAnalysis()"
-                 class="w-full bg-slate-950 border border-slate-700 rounded px-2 py-1.5 text-slate-200">
+                 class="w-full bg-neutral-50 border border-neutral-400 px-2 py-1.5 text-neutral-900">
         </div>
         <div>
-          <label class="block text-slate-400 mb-1">Geometry</label>
+          <label class="block text-neutral-600 mb-1">Geometry</label>
           <select id="microRoiGeometry" onchange="recomputeMicroAnalysis()"
-                  class="w-full bg-slate-950 border border-slate-700 rounded px-2 py-1.5 text-slate-200 focus:outline-none focus:border-slate-500">
+                  class="w-full bg-neutral-50 border border-neutral-400 px-2 py-1.5 text-neutral-900 focus:outline-none focus:border-neutral-900">
             <option value="rect" selected>Rectangle (Box)</option>
             <option value="ellipse">Ellipse / Radial</option>
           </select>
@@ -56,198 +57,187 @@
 
       <div class="flex flex-wrap items-end gap-3 text-xs font-mono">
         <div>
-          <label class="block text-slate-400 mb-1">Anchor X</label>
+          <label class="block text-neutral-600 mb-1">Anchor X</label>
           <input id="microAnchorX" type="number" min="0" value="0" onchange="setMicroAnchorFromInputs()"
-                 class="w-20 bg-slate-950 border border-slate-700 rounded px-2 py-1.5 text-slate-200 text-center">
+                 class="w-20 bg-neutral-50 border border-neutral-400 px-2 py-1.5 text-neutral-900 text-center">
         </div>
         <div>
-          <label class="block text-slate-400 mb-1">Anchor Y</label>
+          <label class="block text-neutral-600 mb-1">Anchor Y</label>
           <input id="microAnchorY" type="number" min="0" value="0" onchange="setMicroAnchorFromInputs()"
-                 class="w-20 bg-slate-950 border border-slate-700 rounded px-2 py-1.5 text-slate-200 text-center">
+                 class="w-20 bg-neutral-50 border border-neutral-400 px-2 py-1.5 text-neutral-900 text-center">
         </div>
         <div class="flex flex-wrap items-center gap-2">
-          <span class="text-slate-500">Presets:</span>
-          <button type="button" onclick="applyMicroRoiPreset(2, 3)" class="px-2.5 py-1 rounded border border-slate-700 bg-slate-800 hover:bg-slate-700 text-[11px]">2 &times; 3</button>
-          <button type="button" onclick="applyMicroRoiPreset(4, 4)" class="px-2.5 py-1 rounded border border-slate-700 bg-slate-800 hover:bg-slate-700 text-[11px]">4 &times; 4</button>
-          <button type="button" onclick="applyMicroRoiPreset(4, 5)" class="px-2.5 py-1 rounded border border-slate-700 bg-slate-800 hover:bg-slate-700 text-[11px]">4 &times; 5</button>
-          <button type="button" onclick="applyMicroRoiPreset(20, 20)" class="px-2.5 py-1 rounded border border-slate-700 bg-slate-800 hover:bg-slate-700 text-[11px]">20 &times; 20</button>
+          <span class="text-neutral-500">Presets:</span>
+          <button type="button" onclick="applyMicroRoiPreset(2, 3)" class="px-2.5 py-1 border border-neutral-400 bg-neutral-100 hover:bg-neutral-200 text-[11px]">2 &times; 3</button>
+          <button type="button" onclick="applyMicroRoiPreset(4, 4)" class="px-2.5 py-1 border border-neutral-400 bg-neutral-100 hover:bg-neutral-200 text-[11px]">4 &times; 4</button>
+          <button type="button" onclick="applyMicroRoiPreset(4, 5)" class="px-2.5 py-1 border border-neutral-400 bg-neutral-100 hover:bg-neutral-200 text-[11px]">4 &times; 5</button>
+          <button type="button" onclick="applyMicroRoiPreset(20, 20)" class="px-2.5 py-1 border border-neutral-400 bg-neutral-100 hover:bg-neutral-200 text-[11px]">20 &times; 20</button>
         </div>
         <div class="flex items-center gap-2 ml-auto">
-          <label for="microCsvInput" class="text-slate-500">Import CSV:</label>
+          <label for="microCsvInput" class="text-neutral-500">Import CSV:</label>
           <input id="microCsvInput" type="file" multiple accept=".csv" onchange="handleMicroCsvUpload(event)"
-                 class="text-[11px] text-slate-400 file:mr-2 file:py-1 file:px-2 file:rounded file:border file:border-slate-700 file:bg-slate-800 file:text-slate-300 cursor-pointer">
+                 class="text-[11px] text-neutral-600 file:mr-2 file:py-1 file:px-2 file:border file:border-neutral-400 file:bg-neutral-100 file:text-neutral-700 cursor-pointer">
           <button type="button" onclick="loadMicroDemoMatrix()"
-                  class="px-2.5 py-1 rounded border border-cyan-800 bg-slate-800 hover:bg-cyan-900/40 text-cyan-400 text-[11px]">
+                  class="px-2.5 py-1 border border-neutral-400 bg-neutral-100 hover:bg-neutral-200 text-neutral-700 text-[11px]">
             Load demo particle cluster
           </button>
         </div>
       </div>
 
-      <p class="text-[11px] text-slate-500 font-mono">
+      <p class="text-[11px] text-neutral-500 font-mono">
         Click the thermogram to move the ROI anchor, or use the modebar draw tools (rectangle / circle) to define the patch free-hand &mdash;
         the W &times; H inputs follow what you draw.
       </p>
     </div>
   </details>
 
-  <!-- DISPLAY + SCALING CONTROLS -->
-  <details class="group bg-slate-900 border border-slate-800 rounded-lg overflow-hidden mb-4" open>
-    <summary class="p-4 cursor-pointer select-none bg-slate-900 hover:bg-slate-800/60 transition text-xs font-bold uppercase tracking-wider text-slate-300 font-mono">
+  <!-- display and scaling -->
+  <details class="group bg-white border border-neutral-300 overflow-hidden mb-4" open>
+    <summary class="p-4 cursor-pointer select-none bg-white hover:bg-neutral-100 text-xs font-bold uppercase tracking-wider text-neutral-800 font-mono">
       2. Micro Contrast Stretching &amp; Micro-Topography Scaling
     </summary>
-    <div class="p-4 border-t border-slate-800 space-y-3">
-      <div class="grid grid-cols-2 md:grid-cols-5 gap-3 text-xs font-mono">
+    <div class="p-4 border-t border-neutral-300 space-y-3">
+      <div class="grid grid-cols-2 md:grid-cols-4 gap-3 text-xs font-mono">
         <div>
-          <label class="block text-slate-400 mb-1">Clip Low (%)</label>
+          <label class="block text-neutral-600 mb-1">Clip Low (%)</label>
           <input id="microLowPct" type="number" min="0" max="50" step="0.5" value="2" onchange="recomputeMicroAnalysis()"
-                 class="w-full bg-slate-950 border border-slate-700 rounded px-2 py-1.5 text-slate-200">
+                 class="w-full bg-neutral-50 border border-neutral-400 px-2 py-1.5 text-neutral-900">
         </div>
         <div>
-          <label class="block text-slate-400 mb-1">Clip High (%)</label>
+          <label class="block text-neutral-600 mb-1">Clip High (%)</label>
           <input id="microHighPct" type="number" min="50" max="100" step="0.5" value="98" onchange="recomputeMicroAnalysis()"
-                 class="w-full bg-slate-950 border border-slate-700 rounded px-2 py-1.5 text-slate-200">
+                 class="w-full bg-neutral-50 border border-neutral-400 px-2 py-1.5 text-neutral-900">
         </div>
         <div>
-          <label class="block text-slate-400 mb-1">Contrast Source</label>
+          <label class="block text-neutral-600 mb-1">Contrast Source</label>
           <select id="microContrastSource" onchange="recomputeMicroAnalysis()"
-                  class="w-full bg-slate-950 border border-slate-700 rounded px-2 py-1.5 text-slate-200 focus:outline-none focus:border-slate-500">
+                  class="w-full bg-neutral-50 border border-neutral-400 px-2 py-1.5 text-neutral-900 focus:outline-none focus:border-neutral-900">
             <option value="roi" selected>ROI patch (micro gradients)</option>
             <option value="frame">Whole frame</option>
           </select>
         </div>
         <div>
-          <label class="block text-slate-400 mb-1">Palette</label>
-          <select id="microPalette" onchange="recomputeMicroAnalysis()"
-                  class="w-full bg-slate-950 border border-slate-700 rounded px-2 py-1.5 text-slate-200 focus:outline-none focus:border-slate-500">
-            <option value="YlOrRd" selected>YlOrRd</option>
-            <option value="Jet">Jet / Ironbow</option>
-            <option value="Hot">Hot</option>
-            <option value="Greys">Greys</option>
-            <option value="Viridis">Viridis</option>
-          </select>
-        </div>
-        <div>
-          <label class="block text-slate-400 mb-1">3D Vertical Scale</label>
+          <label class="block text-neutral-600 mb-1">3D Vertical Scale</label>
           <select id="microSurfaceScale" onchange="recomputeMicroAnalysis()"
-                  class="w-full bg-slate-950 border border-slate-700 rounded px-2 py-1.5 text-slate-200 focus:outline-none focus:border-slate-500">
+                  class="w-full bg-neutral-50 border border-neutral-400 px-2 py-1.5 text-neutral-900 focus:outline-none focus:border-neutral-900">
             <option value="linear" selected>Linear (&deg;C)</option>
             <option value="log">Shifted log ln(1 + &Delta;T)</option>
           </select>
         </div>
       </div>
       <div class="grid grid-cols-1 md:grid-cols-3 gap-3 text-xs font-mono">
-        <div class="bg-slate-950 border border-slate-800 rounded p-2.5 flex justify-between">
-          <span class="text-slate-500">Active ROI:</span><span id="microRoiLabel" class="text-slate-200">--</span>
+        <div class="bg-neutral-50 border border-neutral-300 p-2.5 flex justify-between">
+          <span class="text-neutral-500">Active ROI:</span><span id="microRoiLabel" class="text-neutral-900">--</span>
         </div>
-        <div class="bg-slate-950 border border-slate-800 rounded p-2.5 flex justify-between">
-          <span class="text-slate-500">Percentile span:</span><span id="microClipInfo" class="text-slate-200">--</span>
+        <div class="bg-neutral-50 border border-neutral-300 p-2.5 flex justify-between">
+          <span class="text-neutral-500">Percentile span:</span><span id="microClipInfo" class="text-neutral-900">--</span>
         </div>
-        <div class="bg-slate-950 border border-slate-800 rounded p-2.5 flex justify-between">
-          <span class="text-slate-500">Engine:</span><span id="microStatus" class="text-cyan-400">initialising&hellip;</span>
+        <div class="bg-neutral-50 border border-neutral-300 p-2.5 flex justify-between">
+          <span class="text-neutral-500">Engine:</span><span id="microStatus" class="text-neutral-700">initialising&hellip;</span>
         </div>
       </div>
-      <p class="text-[11px] text-slate-500 font-mono">
-        Heatmaps render with <code class="text-slate-300">zsmooth: false</code>, so a single-pixel particle stays a hard block
+      <p class="text-[11px] text-neutral-500 font-mono">
+        Heatmaps render with <code class="text-neutral-800">zsmooth: false</code>, so a single-pixel particle stays a hard block
         instead of being bilinearly blended into its colder neighbours.
       </p>
     </div>
   </details>
 
-  <!-- MICRO PATCH ANALYTICS -->
-  <details class="group bg-slate-900 border border-slate-800 rounded-lg overflow-hidden mb-4" open>
-    <summary class="p-4 cursor-pointer select-none bg-slate-900 hover:bg-slate-800/60 transition text-xs font-bold uppercase tracking-wider text-slate-300 font-mono">
+  <!-- patch analytics -->
+  <details class="group bg-white border border-neutral-300 overflow-hidden mb-4" open>
+    <summary class="p-4 cursor-pointer select-none bg-white hover:bg-neutral-100 text-xs font-bold uppercase tracking-wider text-neutral-800 font-mono">
       3. Patch Statistics, Sub-Pixel Centroid &amp; Flux Divergence
     </summary>
-    <div class="p-4 border-t border-slate-800 space-y-4">
+    <div class="p-4 border-t border-neutral-300 space-y-4">
       <div class="grid grid-cols-2 md:grid-cols-4 gap-3 text-xs font-mono">
-        <div class="bg-slate-950 border border-slate-800 rounded p-2.5 flex justify-between">
-          <span class="text-slate-500">T<sub>max</sub></span><span id="microStatMax" class="text-orange-400 font-bold">--</span>
+        <div class="bg-neutral-50 border border-neutral-300 p-2.5 flex justify-between">
+          <span class="text-neutral-500">T<sub>max</sub></span><span id="microStatMax" class="text-neutral-700 font-bold">--</span>
         </div>
-        <div class="bg-slate-950 border border-slate-800 rounded p-2.5 flex justify-between">
-          <span class="text-slate-500">T<sub>min</sub></span><span id="microStatMin" class="text-sky-400 font-bold">--</span>
+        <div class="bg-neutral-50 border border-neutral-300 p-2.5 flex justify-between">
+          <span class="text-neutral-500">T<sub>min</sub></span><span id="microStatMin" class="text-neutral-700 font-bold">--</span>
         </div>
-        <div class="bg-slate-950 border border-slate-800 rounded p-2.5 flex justify-between">
-          <span class="text-slate-500">T<sub>mean</sub></span><span id="microStatMean" class="text-slate-200 font-bold">--</span>
+        <div class="bg-neutral-50 border border-neutral-300 p-2.5 flex justify-between">
+          <span class="text-neutral-500">T<sub>mean</sub></span><span id="microStatMean" class="text-neutral-900 font-bold">--</span>
         </div>
-        <div class="bg-slate-950 border border-slate-800 rounded p-2.5 flex justify-between">
-          <span class="text-slate-500">Median</span><span id="microStatMedian" class="text-slate-200 font-bold">--</span>
+        <div class="bg-neutral-50 border border-neutral-300 p-2.5 flex justify-between">
+          <span class="text-neutral-500">Median</span><span id="microStatMedian" class="text-neutral-900 font-bold">--</span>
         </div>
-        <div class="bg-slate-950 border border-slate-800 rounded p-2.5 flex justify-between">
-          <span class="text-slate-500">MAD</span><span id="microStatMad" class="text-slate-200 font-bold">--</span>
+        <div class="bg-neutral-50 border border-neutral-300 p-2.5 flex justify-between">
+          <span class="text-neutral-500">MAD</span><span id="microStatMad" class="text-neutral-900 font-bold">--</span>
         </div>
-        <div class="bg-slate-950 border border-slate-800 rounded p-2.5 flex justify-between">
-          <span class="text-slate-500">Robust &sigma; (1.4826&middot;MAD)</span><span id="microStatRobustStd" class="text-slate-200 font-bold">--</span>
+        <div class="bg-neutral-50 border border-neutral-300 p-2.5 flex justify-between">
+          <span class="text-neutral-500">Robust &sigma; (1.4826&middot;MAD)</span><span id="microStatRobustStd" class="text-neutral-900 font-bold">--</span>
         </div>
-        <div class="bg-slate-950 border border-slate-800 rounded p-2.5 flex justify-between">
-          <span class="text-slate-500">Defect contrast &Delta;T</span><span id="microStatDeltaT" class="text-amber-400 font-bold">--</span>
+        <div class="bg-neutral-50 border border-neutral-300 p-2.5 flex justify-between">
+          <span class="text-neutral-500">Defect contrast &Delta;T</span><span id="microStatDeltaT" class="text-neutral-700 font-bold">--</span>
         </div>
-        <div class="bg-slate-950 border border-slate-800 rounded p-2.5 flex justify-between">
-          <span class="text-slate-500">Patch pixels</span><span id="microStatPixelCount" class="text-slate-200 font-bold">--</span>
+        <div class="bg-neutral-50 border border-neutral-300 p-2.5 flex justify-between">
+          <span class="text-neutral-500">Patch pixels</span><span id="microStatPixelCount" class="text-neutral-900 font-bold">--</span>
         </div>
       </div>
 
       <div class="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs font-mono">
-        <div class="bg-slate-950 border border-cyan-900/60 rounded p-2.5 flex justify-between">
-          <span class="text-slate-500">Thermal centroid (sub-pixel)</span><span id="microCentroid" class="text-cyan-400 font-bold">--</span>
+        <div class="bg-neutral-50 border border-neutral-300 p-2.5 flex justify-between">
+          <span class="text-neutral-500">Thermal centroid (sub-pixel)</span><span id="microCentroid" class="text-neutral-700 font-bold">--</span>
         </div>
-        <div class="bg-slate-950 border border-slate-800 rounded p-2.5 flex justify-between">
-          <span class="text-slate-500">Centroid (patch-local)</span><span id="microCentroidLocal" class="text-slate-200 font-bold">--</span>
+        <div class="bg-neutral-50 border border-neutral-300 p-2.5 flex justify-between">
+          <span class="text-neutral-500">Centroid (patch-local)</span><span id="microCentroidLocal" class="text-neutral-900 font-bold">--</span>
         </div>
-        <div class="bg-slate-950 border border-rose-900/60 rounded p-2.5 flex justify-between">
-          <span class="text-slate-500">Max divergence (source, red)</span><span id="microDivMaxSource" class="text-rose-400 font-bold">--</span>
+        <div class="bg-neutral-50 border border-neutral-300 p-2.5 flex justify-between">
+          <span class="text-neutral-500">Max divergence (source)</span><span id="microDivMaxSource" class="text-neutral-700 font-bold">--</span>
         </div>
-        <div class="bg-slate-950 border border-sky-900/60 rounded p-2.5 flex justify-between">
-          <span class="text-slate-500">Max divergence (sink, blue)</span><span id="microDivMaxSink" class="text-sky-400 font-bold">--</span>
+        <div class="bg-neutral-50 border border-neutral-300 p-2.5 flex justify-between">
+          <span class="text-neutral-500">Max divergence (sink)</span><span id="microDivMaxSink" class="text-neutral-700 font-bold">--</span>
         </div>
-        <div class="bg-slate-950 border border-slate-800 rounded p-2.5 flex justify-between">
-          <span class="text-slate-500">&Sigma; div q (net flux across ROI edge)</span><span id="microDivNet" class="text-slate-200 font-bold">--</span>
+        <div class="bg-neutral-50 border border-neutral-300 p-2.5 flex justify-between">
+          <span class="text-neutral-500">&Sigma; div q (net flux across ROI edge)</span><span id="microDivNet" class="text-neutral-900 font-bold">--</span>
         </div>
-        <div class="bg-slate-950 border border-slate-800 rounded p-2.5 flex justify-between">
-          <span class="text-slate-500">Peak |q| (relative)</span><span id="microFluxPeak" class="text-amber-400 font-bold">--</span>
+        <div class="bg-neutral-50 border border-neutral-300 p-2.5 flex justify-between">
+          <span class="text-neutral-500">Peak |q| (relative)</span><span id="microFluxPeak" class="text-neutral-700 font-bold">--</span>
         </div>
       </div>
 
       <div class="flex flex-wrap items-center gap-3">
         <button type="button" onclick="exportMicroCsv()"
-                class="px-3 py-1.5 rounded border border-slate-700 bg-slate-800 hover:bg-slate-700 text-xs font-mono">
+                class="px-3 py-1.5 border border-neutral-400 bg-neutral-100 hover:bg-neutral-200 text-xs font-mono">
           EXPORT CSV (temperature + divergence)
         </button>
         <button type="button" onclick="exportMicroJson()"
-                class="px-3 py-1.5 rounded border border-slate-700 bg-slate-800 hover:bg-slate-700 text-xs font-mono">
+                class="px-3 py-1.5 border border-neutral-400 bg-neutral-100 hover:bg-neutral-200 text-xs font-mono">
           EXPORT JSON REPORT
         </button>
-        <span class="text-[11px] text-slate-500 font-mono">
+        <span class="text-[11px] text-neutral-500 font-mono">
           q = &minus;k&nabla;T with k = 1, so flux and divergence are in relative units until a conductivity / IFOV calibration is applied.
         </span>
       </div>
     </div>
   </details>
 
-  <!-- PLOT GRID -->
+  <!-- plots -->
   <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
-    <div class="bg-slate-900 border border-slate-800 rounded-lg p-3">
-      <h3 class="text-[11px] font-bold font-mono text-slate-400 mb-2">UNBLURRED THERMOGRAM + R.O.I. (zsmooth: false)</h3>
+    <div class="bg-white border border-neutral-300 p-3">
+      <h3 class="text-[11px] font-bold font-mono text-neutral-600 mb-2">UNBLURRED THERMOGRAM + R.O.I. (zsmooth: false)</h3>
       <div id="microHeatmap" class="w-full h-80"></div>
     </div>
-    <div class="bg-slate-900 border border-slate-800 rounded-lg p-3">
-      <h3 class="text-[11px] font-bold font-mono text-slate-400 mb-2">3D MICRO-TOPOGRAPHY (aspect-matched)</h3>
+    <div class="bg-white border border-neutral-300 p-3">
+      <h3 class="text-[11px] font-bold font-mono text-neutral-600 mb-2">3D MICRO-TOPOGRAPHY (aspect-matched)</h3>
       <div id="microSurface" class="w-full h-80"></div>
     </div>
-    <div class="bg-slate-900 border border-slate-800 rounded-lg p-3">
-      <h3 class="text-[11px] font-bold font-mono text-slate-400 mb-2">FLUX VECTORS &minus;&nabla;T (Fourier conduction)</h3>
+    <div class="bg-white border border-neutral-300 p-3">
+      <h3 class="text-[11px] font-bold font-mono text-neutral-600 mb-2">FLUX VECTORS &minus;&nabla;T (Fourier conduction)</h3>
       <div id="microQuiver" class="w-full h-80"></div>
     </div>
-    <div class="bg-slate-900 border border-slate-800 rounded-lg p-3">
-      <h3 class="text-[11px] font-bold font-mono text-slate-400 mb-2">FLUX DIVERGENCE &nabla;&middot;q &mdash; RED = SOURCE, BLUE = SINK</h3>
+    <div class="bg-white border border-neutral-300 p-3">
+      <h3 class="text-[11px] font-bold font-mono text-neutral-600 mb-2">FLUX DIVERGENCE &nabla;&middot;q &mdash; DARK = SOURCE, LIGHT = SINK, ZERO CONTOUR</h3>
       <div id="microDivergence" class="w-full h-80"></div>
     </div>
   </div>
 
-  <footer class="mt-4 text-[11px] text-slate-500 font-mono">
+  <footer class="mt-4 text-[11px] text-neutral-500 font-mono">
     All processing is client-side; patch matrices come from IndexedDB, CSV imports or the built-in demo cluster.
   </footer>
 
-  <!-- Application Modules (order matters: engines before the UI layer) -->
+  <!-- engines before the app layer -->
   <script src="js/thermalEngine.js"></script>
   <script src="js/microEngine.js"></script>
   <script src="js/microApp.js"></script>

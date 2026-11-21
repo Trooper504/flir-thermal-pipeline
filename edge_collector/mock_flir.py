@@ -3,10 +3,7 @@ import numpy as np
 import time
 
 class MockFlirCamera:
-    """
-    Simulates a FLIR E8-XT thermal camera output (320x240 radiometric array)
-    for development without physical hardware.
-    """
+    """Stand-in for the E8-XT: a 320x240 radiometric array, no hardware required."""
     def __init__(self, width=320, height=240):
         self.width = width
         self.height = height

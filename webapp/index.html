@@ -8,242 +8,202 @@
   <script src="https://cdn.plot.ly/plotly-2.27.0.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/gif.js/0.2.0/gif.js"></script>
 </head>
-<body class="bg-slate-950 text-slate-100 font-sans p-6 min-h-screen">
+<body class="bg-neutral-50 text-neutral-900 font-sans p-6 min-h-screen">
 
   <div class="max-w-7xl mx-auto space-y-4">
-    <!-- Header -->
-    <header class="flex justify-between items-center border-b border-slate-800 pb-4">
+    <header class="flex justify-between items-center border-b border-neutral-300 pb-4">
       <div>
-        <h1 class="text-xl font-bold text-slate-100 tracking-wide">FLIR Radiometric Processing Unit</h1>
-        <p class="text-xs text-slate-400 font-mono">Edge Ingestion, Spatial Gradient Processing, and Differential Analysis</p>
+        <h1 class="text-xl font-bold text-neutral-900 tracking-wide">FLIR Radiometric Processing Unit</h1>
+        <p class="text-xs text-neutral-600 font-mono">Edge Ingestion, Spatial Gradient Processing, and Differential Analysis</p>
       </div>
-      <div class="flex items-center gap-2">
-        <nav class="flex items-center gap-2 text-xs font-mono mr-2">
-          <a href="live.html" title="Real-time viewfinder, shutter trigger and capture hand-off"
-             class="px-3 py-1 rounded border border-emerald-800 bg-slate-900 hover:bg-emerald-900/40 text-emerald-400 transition">
-            Live Studio
-          </a>
-          <a href="micro_inspector.html" title="Sub-millimetre particle, flux and divergence analysis"
-             class="px-3 py-1 rounded border border-cyan-800 bg-slate-900 hover:bg-cyan-900/40 text-cyan-400 transition">
-            Micro Inspector
-          </a>
-          <a href="mask_studio.html" title="Draw one global polygon and reuse it across every stored frame"
-             class="px-3 py-1 rounded border border-fuchsia-800 bg-slate-900 hover:bg-fuchsia-900/40 text-fuchsia-400 transition">
-            Mask Studio
-          </a>
+      <div class="flex items-center gap-4">
+        <nav class="flex items-center gap-4 text-xs font-mono text-neutral-600">
+          <span class="font-bold text-neutral-900">Workbench</span>
+          <a href="live.html" class="hover:text-neutral-900 underline underline-offset-2">Live Studio</a>
+          <a href="micro_inspector.html" class="hover:text-neutral-900 underline underline-offset-2">Micro Inspector</a>
+          <a href="mask_studio.html" class="hover:text-neutral-900 underline underline-offset-2">Mask Studio</a>
         </nav>
-        <span id="statusBadge" class="px-3 py-1 bg-slate-900 border border-slate-700 rounded text-xs font-mono text-slate-300">
+        <span id="statusBadge" class="px-3 py-1 bg-white border border-neutral-400 text-xs font-mono text-neutral-800">
           SYSTEM IDLE
         </span>
       </div>
     </header>
 
-    <!-- SECTION 1: SYSTEM CONFIGURATION & PALETTE -->
-    <details class="group bg-slate-900 border border-slate-800 rounded-lg overflow-hidden" open>
-      <summary class="flex justify-between items-center p-4 cursor-pointer select-none bg-slate-900 hover:bg-slate-800/60 transition border-b border-transparent group-open:border-slate-800">
+    <!-- section 1: configuration and ingestion -->
+    <details class="group bg-white border border-neutral-300 overflow-hidden" open>
+      <summary class="flex justify-between items-center p-4 cursor-pointer select-none bg-white hover:bg-neutral-100 border-b border-transparent group-open:border-neutral-300">
         <div class="flex items-center gap-2">
-          <svg class="w-4 h-4 text-slate-400 transform transition-transform group-open:rotate-90" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <svg class="w-4 h-4 text-neutral-600 transform group-open:rotate-90" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
           </svg>
-          <h2 class="text-xs font-bold uppercase tracking-wider text-slate-300 font-mono">
+          <h2 class="text-xs font-bold uppercase tracking-wider text-neutral-800 font-mono">
             1. Radiometric Parameters & Ingestion
           </h2>
         </div>
-        <span class="text-[11px] text-slate-500 font-mono">Storage: IndexedDB Active</span>
+        <span class="text-[11px] text-neutral-500 font-mono">Storage: IndexedDB Active</span>
       </summary>
 
       <div class="p-4 space-y-4">
         <div class="grid grid-cols-2 md:grid-cols-6 gap-4 text-xs font-mono">
           <div>
-            <label class="block text-slate-400 mb-1">Data Source</label>
+            <label class="block text-neutral-600 mb-1">Data Source</label>
             <select id="cfgDataSource" onchange="handleSourceChange()" 
-                    class="w-full bg-slate-950 border border-slate-700 rounded px-2 py-1.5 text-slate-200 focus:outline-none focus:border-slate-500">
+                    class="w-full bg-neutral-50 border border-neutral-400 px-2 py-1.5 text-neutral-900 focus:outline-none focus:border-neutral-900">
               <option value="simulation">Offline Simulation</option>
               <option value="pi">Live Pi API</option>
               <option value="csv">Import CSV</option>
             </select>
           </div>
           <div>
-            <label class="block text-slate-400 mb-1">Emissivity (e)</label>
+            <label class="block text-neutral-600 mb-1">Emissivity (e)</label>
             <input id="cfgEmissivity" type="number" step="0.01" min="0.1" max="1.0" value="0.95" onchange="triggerRecalibration()"
-                   class="w-full bg-slate-950 border border-slate-700 rounded px-2 py-1.5 text-slate-200">
+                   class="w-full bg-neutral-50 border border-neutral-400 px-2 py-1.5 text-neutral-900">
           </div>
           <div>
-            <label class="block text-slate-400 mb-1">Hotspot Cutoff (k.s)</label>
+            <label class="block text-neutral-600 mb-1">Hotspot Cutoff (k.s)</label>
             <input id="cfgHotspotSensitivity" type="number" step="0.5" min="1.0" max="5.0" value="2.0" onchange="replotActiveCanvas()"
-                   class="w-full bg-slate-950 border border-slate-700 rounded px-2 py-1.5 text-slate-200">
+                   class="w-full bg-neutral-50 border border-neutral-400 px-2 py-1.5 text-neutral-900">
           </div>
           <div>
-            <label class="block text-slate-400 mb-1">Display Min (&deg;C)</label>
+            <label class="block text-neutral-600 mb-1">Display Min (&deg;C)</label>
             <input id="cfgMinTemp" type="number" step="1" value="15" onchange="replotActiveCanvas()"
-                   class="w-full bg-slate-950 border border-slate-700 rounded px-2 py-1.5 text-slate-200">
+                   class="w-full bg-neutral-50 border border-neutral-400 px-2 py-1.5 text-neutral-900">
           </div>
           <div>
-            <label class="block text-slate-400 mb-1">Display Max (&deg;C)</label>
+            <label class="block text-neutral-600 mb-1">Display Max (&deg;C)</label>
             <input id="cfgMaxTemp" type="number" step="1" value="60" onchange="replotActiveCanvas()"
-                   class="w-full bg-slate-950 border border-slate-700 rounded px-2 py-1.5 text-slate-200">
+                   class="w-full bg-neutral-50 border border-neutral-400 px-2 py-1.5 text-neutral-900">
           </div>
           <div>
-            <label class="block text-slate-400 mb-1">Pi Endpoint</label>
+            <label class="block text-neutral-600 mb-1">Pi Endpoint</label>
             <input id="cfgApiUrl" type="text" value="http://localhost:8081/api/v1/thermal-frame" disabled
                    onchange="persistCollectorEndpoint(this)"
-                   class="w-full bg-slate-950 border border-slate-800 rounded px-2 py-1.5 text-slate-600 opacity-60">
-            <span class="block mt-1 text-[10px] text-slate-500 font-mono leading-snug">
-              Laptop-only client: use the Pi's address, e.g. <span class="text-slate-400">http://192.168.1.42:8081</span> (remembered in this browser).
+                   class="w-full bg-neutral-50 border border-neutral-300 px-2 py-1.5 text-neutral-400 opacity-60">
+            <span class="block mt-1 text-[10px] text-neutral-500 font-mono leading-snug">
+              Laptop-only client: use the Pi's address, e.g. <span class="text-neutral-600">http://192.168.1.42:8081</span> (remembered in this browser).
             </span>
           </div>
         </div>
 
-        <div id="csvUploadContainer" class="hidden border-t border-slate-800 pt-3">
-          <label class="block text-xs font-semibold text-slate-400 mb-1 font-mono">Select CSV Files:</label>
+        <div id="csvUploadContainer" class="hidden border-t border-neutral-300 pt-3">
+          <label class="block text-xs font-semibold text-neutral-600 mb-1 font-mono">Select CSV Files:</label>
           <input id="csvFileInput" type="file" multiple accept=".csv" onchange="handleCsvFilesUpload(event)"
-                 class="block w-full text-xs text-slate-400 file:mr-4 file:py-1 file:px-3 file:rounded file:border file:border-slate-700 file:text-xs file:bg-slate-800 file:text-slate-300 hover:file:bg-slate-700 cursor-pointer font-mono">
+                 class="block w-full text-xs text-neutral-600 file:mr-4 file:py-1 file:px-3 file:border file:border-neutral-400 file:text-xs file:bg-neutral-100 file:text-neutral-700 hover:file:bg-neutral-200 cursor-pointer font-mono">
         </div>
 
-        <!-- Palette Sub-Section -->
-        <div class="bg-slate-950 p-3 rounded border border-slate-800 space-y-2">
-          <span class="text-[11px] font-bold uppercase tracking-wider text-slate-400 font-mono">Palette & Colormap Controls</span>
-          <div class="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs font-mono">
-            <div>
-              <label class="block text-slate-500 mb-1">Heatmap Colormap (Radiometric)</label>
-              <select id="cfgHeatmapPalette" onchange="replotActiveCanvas()" 
-                      class="w-full bg-slate-900 border border-slate-800 text-slate-200 rounded px-2 py-1.5 focus:outline-none focus:border-slate-600">
-                <option value="YlOrRd">YlOrRd (Standard Thermal)</option>
-                <option value="Jet">Jet / Ironbow (FLIR Rainbow)</option>
-                <option value="Hot">Hot (High-Brightness)</option>
-                <option value="Greys">Greys (Thermal Grayscale)</option>
-                <option value="Viridis">Viridis (Linear Perception)</option>
-              </select>
-            </div>
-            <div>
-              <label class="block text-slate-500 mb-1">Gradient Colormap (dT Deviation)</label>
-              <select id="cfgGradientPalette" onchange="replotActiveCanvas()" 
-                      class="w-full bg-slate-900 border border-slate-800 text-slate-200 rounded px-2 py-1.5 focus:outline-none focus:border-slate-600">
-                <option value="RdBu">RdBu (Diverging Centered at 0.0)</option>
-                <option value="Coolwarm">Coolwarm (Blue-Red Deviation)</option>
-                <option value="Viridis">Viridis (Perceptually Uniform)</option>
-                <option value="Electric">Electric (High-Contrast Gradient)</option>
-              </select>
-            </div>
-          </div>
-        </div>
       </div>
     </details>
 
-    <!-- SECTION 2: STREAM & BATCH CONTROLS (ALWAYS ACCESSIBLE) -->
-    <div class="bg-slate-900 border border-slate-800 p-4 rounded-lg flex flex-wrap justify-between items-center gap-4">
+    <!-- section 2: stream and batch controls -->
+    <div class="bg-white border border-neutral-300 p-4 flex flex-wrap justify-between items-center gap-4">
       <div class="flex items-center gap-3">
         <button id="btnImport" onclick="startImportStream()" title="Ingest every capture currently stored on the camera"
-                class="bg-slate-800 hover:bg-slate-700 text-slate-100 border border-slate-600 px-4 py-1.5 rounded text-xs font-mono transition">
+                class="bg-neutral-100 hover:bg-neutral-200 text-neutral-900 border border-neutral-500 px-4 py-1.5 text-xs font-mono">
           START STREAM
         </button>
-        <!-- Incremental ingestion: pull only the newest N camera captures -->
-        <div class="flex items-center gap-2 bg-slate-950 border border-slate-800 rounded px-2 py-1">
-          <label for="cfgIngestCount" class="text-[11px] text-slate-500 font-mono">LAST</label>
+        <div class="flex items-center gap-2 bg-neutral-50 border border-neutral-300 px-2 py-1">
+          <label for="cfgIngestCount" class="text-[11px] text-neutral-500 font-mono">LAST</label>
           <input id="cfgIngestCount" type="number" min="1" max="999" step="1" value="4" title="How many of the most recent camera shots to ingest"
-                 class="w-14 bg-slate-900 border border-slate-700 rounded px-2 py-1 text-slate-200 text-xs font-mono focus:outline-none focus:border-slate-500">
-          <label for="cfgIngestCount" class="text-[11px] text-slate-500 font-mono">SHOTS</label>
+                 class="w-14 bg-white border border-neutral-400 px-2 py-1 text-neutral-900 text-xs font-mono focus:outline-none focus:border-neutral-900">
+          <label for="cfgIngestCount" class="text-[11px] text-neutral-500 font-mono">SHOTS</label>
           <button id="btnImportLastN" onclick="ingestLastN()" title="Ingest only the newest N captures from the camera album"
-                  class="bg-slate-800 hover:bg-slate-700 text-slate-100 border border-slate-600 px-3 py-1 rounded text-xs font-mono transition">
+                  class="bg-neutral-100 hover:bg-neutral-200 text-neutral-900 border border-neutral-500 px-3 py-1 text-xs font-mono">
             INGEST LAST N
           </button>
         </div>
         <button id="btnStop" onclick="stopImportStream()" disabled 
-                class="bg-slate-950 text-slate-600 border border-slate-800 opacity-50 cursor-not-allowed px-4 py-1.5 rounded text-xs font-mono transition">
+                class="bg-neutral-50 text-neutral-400 border border-neutral-300 opacity-50 cursor-not-allowed px-4 py-1.5 text-xs font-mono">
           STOP STREAM
         </button>
         <button id="btnClear" onclick="clearDbAndGallery()" 
-                class="bg-slate-950 hover:bg-slate-800 text-slate-400 border border-slate-800 px-4 py-1.5 rounded text-xs font-mono transition">
+                class="bg-neutral-50 hover:bg-neutral-100 text-neutral-600 border border-neutral-300 px-4 py-1.5 text-xs font-mono">
           CLEAR DATABASE
         </button>
       </div>
 
-      <div id="batchActionGroup" class="hidden flex items-center gap-3 bg-slate-950 px-3 py-1.5 border border-slate-800 rounded">
-        <span class="text-xs text-slate-400 font-mono"><strong id="lblSelectedCount" class="text-slate-200">0</strong> selected</span>
-        <button onclick="exportSelectedCSV()" class="bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs px-3 py-1 rounded font-mono border border-slate-700 transition">
+      <div id="batchActionGroup" class="hidden flex items-center gap-3 bg-neutral-50 px-3 py-1.5 border border-neutral-300">
+        <span class="text-xs text-neutral-600 font-mono"><strong id="lblSelectedCount" class="text-neutral-900">0</strong> selected</span>
+        <button onclick="exportSelectedCSV()" class="bg-neutral-100 hover:bg-neutral-200 text-neutral-900 text-xs px-3 py-1 font-mono border border-neutral-400">
           EXPORT CSV
         </button>
-        <button onclick="exportLabReportJSON()" class="bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs px-3 py-1 rounded font-mono border border-slate-700 transition">
+        <button onclick="exportLabReportJSON()" class="bg-neutral-100 hover:bg-neutral-200 text-neutral-900 text-xs px-3 py-1 font-mono border border-neutral-400">
           EXPORT JSON REPORT
         </button>
-        <button onclick="generatePrintableLabReport()" class="bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs px-3 py-1 rounded font-mono border border-slate-700 transition">
+        <button onclick="generatePrintableLabReport()" class="bg-neutral-100 hover:bg-neutral-200 text-neutral-900 text-xs px-3 py-1 font-mono border border-neutral-400">
           PRINT PDF REPORT
         </button>
-        <button id="btnGenerateGif" onclick="generateSelectedGIF()" class="bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs px-3 py-1 rounded font-mono border border-slate-700 transition">
+        <button id="btnGenerateGif" onclick="generateSelectedGIF()" class="bg-neutral-100 hover:bg-neutral-200 text-neutral-900 text-xs px-3 py-1 font-mono border border-neutral-400">
           GENERATE GIFS
         </button>
       </div>
     </div>
 
-    <!-- SECTION 3: STORED FRAMES GALLERY -->
-    <details class="group bg-slate-900 border border-slate-800 rounded-lg overflow-hidden" open>
-      <summary class="flex justify-between items-center p-4 cursor-pointer select-none bg-slate-900 hover:bg-slate-800/60 transition border-b border-transparent group-open:border-slate-800">
+    <!-- section 3: stored frames -->
+    <details class="group bg-white border border-neutral-300 overflow-hidden" open>
+      <summary class="flex justify-between items-center p-4 cursor-pointer select-none bg-white hover:bg-neutral-100 border-b border-transparent group-open:border-neutral-300">
         <div class="flex items-center gap-2">
-          <svg class="w-4 h-4 text-slate-400 transform transition-transform group-open:rotate-90" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <svg class="w-4 h-4 text-neutral-600 transform group-open:rotate-90" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
           </svg>
-          <h2 class="text-xs font-bold uppercase tracking-wider text-slate-300 font-mono">
-            Stored Frames (<span id="lblFrameCount" class="text-slate-100 font-mono">0</span>)
+          <h2 class="text-xs font-bold uppercase tracking-wider text-neutral-800 font-mono">
+            Stored Frames (<span id="lblFrameCount" class="text-neutral-900 font-mono">0</span>)
           </h2>
         </div>
-        <button type="button" onclick="event.stopPropagation(); selectAllFrames();" class="text-xs text-slate-400 hover:text-slate-200 font-mono">
+        <button type="button" onclick="event.stopPropagation(); selectAllFrames();" class="text-xs text-neutral-600 hover:text-neutral-900 font-mono">
           Select All
         </button>
       </summary>
       <div class="p-4">
         <div id="galleryGrid" class="grid grid-cols-2 md:grid-cols-6 gap-3 max-h-40 overflow-y-auto p-1">
-          <!-- Frame items populated by JS -->
         </div>
       </div>
     </details>
 
-    <!-- SECTION 4: INSPECTOR DASHBOARD -->
+    <!-- section 4: inspector -->
     <div id="inspectorPanel" class="hidden space-y-4">
       
-      <!-- Telemetry Status Bar -->
-      <div class="bg-slate-900 border border-slate-800 p-3 rounded-lg flex flex-wrap justify-between items-center gap-4">
+      <div class="bg-white border border-neutral-300 p-3 flex flex-wrap justify-between items-center gap-4">
         <div class="flex items-center gap-3 text-xs font-mono">
-          <span class="text-slate-500">Inspected Frame:</span>
-          <span id="inspectorTimestamp" class="text-slate-200 font-bold">--</span>
+          <span class="text-neutral-500">Inspected Frame:</span>
+          <span id="inspectorTimestamp" class="text-neutral-900 font-bold">--</span>
         </div>
         <div id="hotspotAlert" class="text-xs font-mono">
-          <!-- Populated by JS -->
         </div>
         <div class="flex items-center gap-3 font-mono text-xs">
-          <div class="bg-slate-950 px-2.5 py-1 border border-slate-800 rounded">
-            Coord: <span id="hoverCoords" class="text-slate-400">--</span>
+          <div class="bg-neutral-50 px-2.5 py-1 border border-neutral-300">
+            Coord: <span id="hoverCoords" class="text-neutral-600">--</span>
           </div>
-          <div class="bg-slate-950 px-2.5 py-1 border border-slate-800 rounded text-slate-200 font-bold">
+          <div class="bg-neutral-50 px-2.5 py-1 border border-neutral-300 text-neutral-900 font-bold">
             Temp: <span id="hoverTemp">-- &deg;C</span>
           </div>
         </div>
       </div>
 
-      <!-- COLLAPSIBLE: 2D CANVASES & SPATIAL GRADIENT -->
-      <details class="group bg-slate-900 border border-slate-800 rounded-lg overflow-hidden" open>
-        <summary class="flex justify-between items-center p-4 cursor-pointer select-none bg-slate-900 hover:bg-slate-800/60 transition border-b border-transparent group-open:border-slate-800">
+      <!-- 2D canvases and gradient -->
+      <details class="group bg-white border border-neutral-300 overflow-hidden" open>
+        <summary class="flex justify-between items-center p-4 cursor-pointer select-none bg-white hover:bg-neutral-100 border-b border-transparent group-open:border-neutral-300">
           <div class="flex items-center gap-2">
-            <svg class="w-4 h-4 text-slate-400 transform transition-transform group-open:rotate-90" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <svg class="w-4 h-4 text-neutral-600 transform group-open:rotate-90" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
             </svg>
-            <h3 class="text-xs font-bold font-mono text-slate-300">2D RADIOMETRIC HEATMAP & SPATIAL GRADIENT</h3>
+            <h3 class="text-xs font-bold font-mono text-neutral-800">2D RADIOMETRIC HEATMAP & SPATIAL GRADIENT</h3>
           </div>
-          <span class="text-[11px] text-slate-500 font-mono">2D Field View</span>
+          <span class="text-[11px] text-neutral-500 font-mono">2D Field View</span>
         </summary>
         <div class="p-4 grid grid-cols-1 md:grid-cols-2 gap-6">
-          <div class="bg-slate-950 p-3 rounded border border-slate-800">
-            <h4 class="text-xs font-bold font-mono text-slate-400 mb-2">RADIOMETRIC HEATMAP (&deg;C)</h4>
+          <div class="bg-neutral-50 p-3 border border-neutral-300">
+            <h4 class="text-xs font-bold font-mono text-neutral-600 mb-2">RADIOMETRIC HEATMAP (&deg;C)</h4>
             <div id="thermalPlot" class="w-full h-80"></div>
           </div>
-          <div class="bg-slate-950 p-3 rounded border border-slate-800">
+          <div class="bg-neutral-50 p-3 border border-neutral-300">
             <div class="flex justify-between items-center mb-2">
-              <h4 id="lblSpatialPlotTitle" class="text-xs font-bold font-mono text-slate-400">
+              <h4 id="lblSpatialPlotTitle" class="text-xs font-bold font-mono text-neutral-600">
                 SPATIAL GRADIENT / DEVIATION
               </h4>
               <div class="flex items-center gap-1">
-                <label for="cfgSpatialOpMode" class="text-[10px] text-slate-500 font-mono">Method:</label>
+                <label for="cfgSpatialOpMode" class="text-[10px] text-neutral-500 font-mono">Method:</label>
                 <select id="cfgSpatialOpMode" onchange="replotActiveCanvas()" 
-                        class="bg-slate-900 border border-slate-700 text-slate-200 text-[11px] font-mono rounded px-2 py-0.5 focus:outline-none">
+                        class="bg-white border border-neutral-400 text-neutral-900 text-[11px] font-mono px-2 py-0.5 focus:outline-none">
                   <option value="laplacian" selected>Laplacian Deviation (dT &deg;C)</option>
                   <option value="sobel">Sobel Gradient Magnitude (|&nabla;T|)</option>
                 </select>
@@ -254,110 +214,100 @@
         </div>
       </details>
 
-      <!-- COLLAPSIBLE: ISOTHERMAL RANGE MASKING -->
-      <details class="group bg-slate-900 border border-slate-800 rounded-lg overflow-hidden">
-        <summary class="flex justify-between items-center p-4 cursor-pointer select-none bg-slate-900 hover:bg-slate-800/60 transition border-b border-transparent group-open:border-slate-800">
+      <!-- isothermal mask -->
+      <details class="group bg-white border border-neutral-300 overflow-hidden">
+        <summary class="flex justify-between items-center p-4 cursor-pointer select-none bg-white hover:bg-neutral-100 border-b border-transparent group-open:border-neutral-300">
           <div class="flex items-center gap-2">
-            <svg class="w-4 h-4 text-slate-400 transform transition-transform group-open:rotate-90" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <svg class="w-4 h-4 text-neutral-600 transform group-open:rotate-90" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
             </svg>
-            <h3 class="text-xs font-bold font-mono text-slate-300">ISOTHERMAL RANGE MASKING</h3>
+            <h3 class="text-xs font-bold font-mono text-neutral-800">ISOTHERMAL RANGE MASKING</h3>
           </div>
           <div class="flex items-center gap-2" onclick="event.stopPropagation()">
-            <input id="chkEnableIso" type="checkbox" onchange="replotActiveCanvas()" class="rounded bg-slate-950 border-slate-700 text-slate-400">
-            <label for="chkEnableIso" class="text-xs font-mono text-slate-300">Enable Mask</label>
+            <input id="chkEnableIso" type="checkbox" onchange="replotActiveCanvas()" class="bg-neutral-50 border-neutral-400 text-neutral-600">
+            <label for="chkEnableIso" class="text-xs font-mono text-neutral-800">Enable Mask</label>
           </div>
         </summary>
-        <div class="p-4 grid grid-cols-2 md:grid-cols-5 gap-4 text-xs font-mono">
+        <div class="p-4 grid grid-cols-2 md:grid-cols-4 gap-4 text-xs font-mono">
           <div>
-            <label class="block text-slate-500 mb-1">Iso Min (&deg;C)</label>
-            <input id="isoMinTemp" type="number" step="0.5" value="33.0" onchange="replotActiveCanvas()" class="w-full bg-slate-950 border border-slate-800 text-slate-200 rounded px-2 py-1">
+            <label class="block text-neutral-500 mb-1">Iso Min (&deg;C)</label>
+            <input id="isoMinTemp" type="number" step="0.5" value="33.0" onchange="replotActiveCanvas()" class="w-full bg-neutral-50 border border-neutral-300 text-neutral-900 px-2 py-1">
           </div>
           <div>
-            <label class="block text-slate-500 mb-1">Iso Max (&deg;C)</label>
-            <input id="isoMaxTemp" type="number" step="0.5" value="35.0" onchange="replotActiveCanvas()" class="w-full bg-slate-950 border border-slate-800 text-slate-200 rounded px-2 py-1">
+            <label class="block text-neutral-500 mb-1">Iso Max (&deg;C)</label>
+            <input id="isoMaxTemp" type="number" step="0.5" value="35.0" onchange="replotActiveCanvas()" class="w-full bg-neutral-50 border border-neutral-300 text-neutral-900 px-2 py-1">
           </div>
           <div>
-            <label class="block text-slate-500 mb-1">Mask Pixels</label>
-            <div id="lblIsoPixelCount" class="bg-slate-950 border border-slate-800 text-slate-200 rounded px-2 py-1 font-bold">0 px</div>
+            <label class="block text-neutral-500 mb-1">Mask Pixels</label>
+            <div id="lblIsoPixelCount" class="bg-neutral-50 border border-neutral-300 text-neutral-900 px-2 py-1 font-bold">0 px</div>
           </div>
           <div>
-            <label class="block text-slate-500 mb-1">Surface Area Coverage</label>
-            <div id="lblIsoAreaPct" class="bg-slate-950 border border-slate-800 text-slate-200 rounded px-2 py-1 font-bold">0.00 %</div>
-          </div>
-          <div>
-            <label class="block text-slate-500 mb-1">Mask Color</label>
-            <select id="isoMaskColor" onchange="replotActiveCanvas()" class="w-full bg-slate-950 border border-slate-800 text-slate-200 rounded px-2 py-1 focus:outline-none">
-              <option value="magenta">Magenta (#ff00ff)</option>
-              <option value="cyan">Cyan (#00ffff)</option>
-              <option value="lime">Lime (#00ff00)</option>
-            </select>
+            <label class="block text-neutral-500 mb-1">Surface Area Coverage</label>
+            <div id="lblIsoAreaPct" class="bg-neutral-50 border border-neutral-300 text-neutral-900 px-2 py-1 font-bold">0.00 %</div>
           </div>
         </div>
       </details>
 
-      <!-- COLLAPSIBLE: DIFFERENTIAL POINT INSPECTION & STATS TABLE -->
-      <details class="group bg-slate-900 border border-slate-800 rounded-lg overflow-hidden">
-        <summary class="flex justify-between items-center p-4 cursor-pointer select-none bg-slate-900 hover:bg-slate-800/60 transition border-b border-transparent group-open:border-slate-800">
+      <!-- differential points and stats -->
+      <details class="group bg-white border border-neutral-300 overflow-hidden">
+        <summary class="flex justify-between items-center p-4 cursor-pointer select-none bg-white hover:bg-neutral-100 border-b border-transparent group-open:border-neutral-300">
           <div class="flex items-center gap-2">
-            <svg class="w-4 h-4 text-slate-400 transform transition-transform group-open:rotate-90" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <svg class="w-4 h-4 text-neutral-600 transform group-open:rotate-90" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
             </svg>
-            <h3 class="text-xs font-bold font-mono text-slate-300">DIFFERENTIAL POINT INSPECTION (P1 vs P2) &amp; STATS</h3>
+            <h3 class="text-xs font-bold font-mono text-neutral-800">DIFFERENTIAL POINT INSPECTION (P1 vs P2) &amp; STATS</h3>
           </div>
-          <span class="text-[11px] text-slate-500 font-mono">Delta T = |T(P1) - T(P2)|</span>
+          <span class="text-[11px] text-neutral-500 font-mono">Delta T = |T(P1) - T(P2)|</span>
         </summary>
         
         <div class="p-4 space-y-4">
-          <!-- Interactive point picker: click the 2D thermogram to set P1 / P2 -->
-          <div class="flex flex-wrap items-center gap-3 bg-slate-950 p-2.5 rounded border border-slate-800">
-            <span class="text-[11px] font-bold uppercase tracking-wider text-slate-400 font-mono">Pick on 2D map:</span>
+          <div class="flex flex-wrap items-center gap-3 bg-neutral-50 p-2.5 border border-neutral-300">
+            <span class="text-[11px] font-bold uppercase tracking-wider text-neutral-600 font-mono">Pick on 2D map:</span>
             <button id="btnPickP1" type="button" onclick="setPointPickMode('P1')"
-                    class="px-2.5 py-1 text-[11px] font-mono rounded bg-slate-800 hover:bg-cyan-600 hover:text-slate-950 text-cyan-400 border border-cyan-800 transition">
+                    class="px-2.5 py-1 text-[11px] font-mono bg-neutral-100 hover:bg-neutral-800 hover:text-white text-neutral-700 border border-neutral-400">
               Pick P1
             </button>
             <button id="btnPickP2" type="button" onclick="setPointPickMode('P2')"
-                    class="px-2.5 py-1 text-[11px] font-mono rounded bg-slate-800 hover:bg-amber-500 hover:text-slate-950 text-amber-400 border border-amber-800 transition">
+                    class="px-2.5 py-1 text-[11px] font-mono bg-neutral-100 hover:bg-neutral-800 hover:text-white text-neutral-700 border border-neutral-400">
               Pick P2
             </button>
-            <span class="text-[11px] text-slate-500 font-mono">Auto-advances P1 &rarr; P2</span>
-            <span id="lblPickStatus" class="text-[11px] font-mono text-slate-400 ml-auto">
-              Click the 2D map to set P1 (cyan)
+            <span class="text-[11px] text-neutral-500 font-mono">Auto-advances P1 &rarr; P2</span>
+            <span id="lblPickStatus" class="text-[11px] font-mono text-neutral-600 ml-auto">
+              Click the 2D map to set P1
             </span>
           </div>
 
           <div class="grid grid-cols-2 md:grid-cols-6 gap-4 text-xs font-mono">
             <div>
-              <label class="block text-slate-500 mb-1">Point 1 X (P1_X)</label>
-              <input id="pt1X" type="number" value="20" min="0" onchange="syncManualPointInput()" class="w-full bg-slate-950 border border-slate-800 text-slate-200 rounded px-2 py-1">
+              <label class="block text-neutral-500 mb-1">Point 1 X (P1_X)</label>
+              <input id="pt1X" type="number" value="20" min="0" onchange="syncManualPointInput()" class="w-full bg-neutral-50 border border-neutral-300 text-neutral-900 px-2 py-1">
             </div>
             <div>
-              <label class="block text-slate-500 mb-1">Point 1 Y (P1_Y)</label>
-              <input id="pt1Y" type="number" value="20" min="0" onchange="syncManualPointInput()" class="w-full bg-slate-950 border border-slate-800 text-slate-200 rounded px-2 py-1">
+              <label class="block text-neutral-500 mb-1">Point 1 Y (P1_Y)</label>
+              <input id="pt1Y" type="number" value="20" min="0" onchange="syncManualPointInput()" class="w-full bg-neutral-50 border border-neutral-300 text-neutral-900 px-2 py-1">
             </div>
             <div>
-              <label class="block text-slate-500 mb-1">Point 2 X (P2_X)</label>
-              <input id="pt2X" type="number" value="40" min="0" onchange="syncManualPointInput()" class="w-full bg-slate-950 border border-slate-800 text-slate-200 rounded px-2 py-1">
+              <label class="block text-neutral-500 mb-1">Point 2 X (P2_X)</label>
+              <input id="pt2X" type="number" value="40" min="0" onchange="syncManualPointInput()" class="w-full bg-neutral-50 border border-neutral-300 text-neutral-900 px-2 py-1">
             </div>
             <div>
-              <label class="block text-slate-500 mb-1">Point 2 Y (P2_Y)</label>
-              <input id="pt2Y" type="number" value="40" min="0" onchange="syncManualPointInput()" class="w-full bg-slate-950 border border-slate-800 text-slate-200 rounded px-2 py-1">
+              <label class="block text-neutral-500 mb-1">Point 2 Y (P2_Y)</label>
+              <input id="pt2Y" type="number" value="40" min="0" onchange="syncManualPointInput()" class="w-full bg-neutral-50 border border-neutral-300 text-neutral-900 px-2 py-1">
             </div>
             <div>
-              <label class="block text-slate-500 mb-1">P1 Temperature</label>
-              <div id="lblP1Temp" class="bg-slate-950 border border-slate-800 text-slate-200 rounded px-2 py-1 font-bold">-- &deg;C</div>
+              <label class="block text-neutral-500 mb-1">P1 Temperature</label>
+              <div id="lblP1Temp" class="bg-neutral-50 border border-neutral-300 text-neutral-900 px-2 py-1 font-bold">-- &deg;C</div>
             </div>
             <div>
-              <label class="block text-slate-500 mb-1">Delta T (P1 - P2)</label>
-              <div id="lblDeltaT" class="bg-slate-950 border border-slate-800 text-slate-200 rounded px-2 py-1 font-bold">-- &deg;C</div>
+              <label class="block text-neutral-500 mb-1">Delta T (P1 - P2)</label>
+              <div id="lblDeltaT" class="bg-neutral-50 border border-neutral-300 text-neutral-900 px-2 py-1 font-bold">-- &deg;C</div>
             </div>
           </div>
 
-          <!-- Statistical Summary Table -->
           <div class="overflow-x-auto pt-2">
-            <table class="w-full text-left border-collapse text-xs font-mono text-slate-300">
+            <table class="w-full text-left border-collapse text-xs font-mono text-neutral-800">
               <thead>
-                <tr class="border-b border-slate-800 text-slate-500 uppercase">
+                <tr class="border-b border-neutral-300 text-neutral-500 uppercase">
                   <th class="py-1 px-2">Metric</th>
                   <th class="py-1 px-2">Min Temp</th>
                   <th class="py-1 px-2">Max Temp</th>
@@ -367,13 +317,13 @@
                 </tr>
               </thead>
               <tbody>
-                <tr class="border-b border-slate-800/50">
-                  <td class="py-1.5 px-2 text-slate-400 font-bold">Value</td>
+                <tr class="border-b border-neutral-200">
+                  <td class="py-1.5 px-2 text-neutral-600 font-bold">Value</td>
                   <td id="tblMinTemp" class="py-1.5 px-2">--</td>
                   <td id="tblMaxTemp" class="py-1.5 px-2">--</td>
                   <td id="tblMeanTemp" class="py-1.5 px-2">--</td>
                   <td id="tblStdDev" class="py-1.5 px-2">--</td>
-                  <td id="tblDeltaTVal" class="py-1.5 px-2 font-bold text-slate-100">--</td>
+                  <td id="tblDeltaTVal" class="py-1.5 px-2 font-bold text-neutral-900">--</td>
                 </tr>
               </tbody>
             </table>
@@ -381,24 +331,24 @@
         </div>
       </details>
 
-      <!-- COLLAPSIBLE: 3D THERMAL SURFACE TOPOGRAPHY -->
-      <details class="group bg-slate-900 border border-slate-800 rounded-lg overflow-hidden">
-        <summary class="flex justify-between items-center p-4 cursor-pointer select-none bg-slate-900 hover:bg-slate-800/60 transition border-b border-transparent group-open:border-slate-800">
+      <!-- 3D surface -->
+      <details class="group bg-white border border-neutral-300 overflow-hidden">
+        <summary class="flex justify-between items-center p-4 cursor-pointer select-none bg-white hover:bg-neutral-100 border-b border-transparent group-open:border-neutral-300">
           <div class="flex items-center gap-2">
-            <svg class="w-4 h-4 text-slate-400 transform transition-transform group-open:rotate-90" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <svg class="w-4 h-4 text-neutral-600 transform group-open:rotate-90" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
             </svg>
-            <h3 class="text-xs font-bold font-mono text-slate-300">3D THERMAL SURFACE TOPOGRAPHY</h3>
+            <h3 class="text-xs font-bold font-mono text-neutral-800">3D THERMAL SURFACE TOPOGRAPHY</h3>
           </div>
-          <span class="text-[11px] text-slate-500 font-mono">Interactive Orbit / Zoom</span>
+          <span class="text-[11px] text-neutral-500 font-mono">Interactive Orbit / Zoom</span>
         </summary>
         <div class="p-4">
           <div class="flex justify-between items-center mb-3">
-            <span class="text-[10px] font-mono text-slate-400 uppercase tracking-wider">Elevation & Colormap Projection</span>
+            <span class="text-[10px] font-mono text-neutral-600 uppercase tracking-wider">Elevation Projection</span>
             <div class="flex items-center gap-2" onclick="event.stopPropagation();">
-              <label for="cfgSurfaceScale" class="text-[10px] text-slate-400 font-mono">Scale:</label>
+              <label for="cfgSurfaceScale" class="text-[10px] text-neutral-600 font-mono">Scale:</label>
               <select id="cfgSurfaceScale" onchange="inspectFrame(activeInspectedIdx)" 
-                      class="bg-slate-950 border border-slate-700 text-slate-200 text-[11px] font-mono rounded px-2 py-1 focus:outline-none focus:border-cyan-500">
+                      class="bg-neutral-50 border border-neutral-400 text-neutral-900 text-[11px] font-mono px-2 py-1 focus:outline-none focus:border-neutral-900">
                 <option value="linear" selected>Linear (°C)</option>
                 <option value="log">Logarithmic [ln(1 + ΔT)]</option>
               </select>
@@ -408,23 +358,23 @@
         </div>
       </details>
 
-      <!-- COLLAPSIBLE: CROSS-SECTION SLICE ANALYZER -->
-      <details class="group bg-slate-900 border border-slate-800 rounded-lg overflow-hidden">
-        <summary class="flex justify-between items-center p-4 cursor-pointer select-none bg-slate-900 hover:bg-slate-800/60 transition border-b border-transparent group-open:border-slate-800">
+      <!-- cross-section -->
+      <details class="group bg-white border border-neutral-300 overflow-hidden">
+        <summary class="flex justify-between items-center p-4 cursor-pointer select-none bg-white hover:bg-neutral-100 border-b border-transparent group-open:border-neutral-300">
           <div class="flex items-center gap-2">
-            <svg class="w-4 h-4 text-slate-400 transform transition-transform group-open:rotate-90" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <svg class="w-4 h-4 text-neutral-600 transform group-open:rotate-90" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
             </svg>
-            <h3 class="text-xs font-bold font-mono text-slate-300">1D CROSS-SECTION PROFILE</h3>
+            <h3 class="text-xs font-bold font-mono text-neutral-800">1D CROSS-SECTION PROFILE</h3>
           </div>
           <div class="flex items-center gap-3 text-xs font-mono" onclick="event.stopPropagation()">
-            <label class="text-slate-500">Direction:</label>
-            <select id="sliceOrientation" onchange="updateLineProfile()" class="bg-slate-950 border border-slate-800 text-slate-300 rounded px-2 py-1 focus:outline-none">
+            <label class="text-neutral-500">Direction:</label>
+            <select id="sliceOrientation" onchange="updateLineProfile()" class="bg-neutral-50 border border-neutral-300 text-neutral-800 px-2 py-1 focus:outline-none">
               <option value="horizontal">Horizontal (X-Axis)</option>
               <option value="vertical">Vertical (Y-Axis)</option>
             </select>
-            <label class="text-slate-500">Idx:</label>
-            <input id="sliceIndex" type="number" value="120" min="0" onchange="updateLineProfile()" class="w-14 bg-slate-950 border border-slate-800 text-slate-300 rounded px-1.5 py-1 text-center">
+            <label class="text-neutral-500">Idx:</label>
+            <input id="sliceIndex" type="number" value="120" min="0" onchange="updateLineProfile()" class="w-14 bg-neutral-50 border border-neutral-300 text-neutral-800 px-1.5 py-1 text-center">
           </div>
         </summary>
         <div class="p-4">
@@ -432,262 +382,240 @@
         </div>
       </details>
 
-      <!-- COLLAPSIBLE: ADVANCED NDT & TEMPORAL THERMOGRAPHY -->
-      <details class="group bg-slate-900 border border-slate-800 rounded-lg overflow-hidden">
-        <summary class="flex justify-between items-center p-4 cursor-pointer select-none bg-slate-900 hover:bg-slate-800/60 transition border-b border-transparent group-open:border-slate-800">
+      <!-- NDT: PPT and TSR -->
+      <details class="group bg-white border border-neutral-300 overflow-hidden">
+        <summary class="flex justify-between items-center p-4 cursor-pointer select-none bg-white hover:bg-neutral-100 border-b border-transparent group-open:border-neutral-300">
           <div class="flex items-center gap-2">
-            <svg class="w-4 h-4 text-slate-400 transform transition-transform group-open:rotate-90" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <svg class="w-4 h-4 text-neutral-600 transform group-open:rotate-90" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
             </svg>
-            <h3 class="text-xs font-bold font-mono text-slate-300">TEMPORAL NDT ANALYSIS (PPT &amp; TSR DERIVATIVES)</h3>
+            <h3 class="text-xs font-bold font-mono text-neutral-800">TEMPORAL NDT ANALYSIS (PPT &amp; TSR DERIVATIVES)</h3>
           </div>
-          <span class="text-[11px] text-slate-500 font-mono">Pixel-wise 1D-FFT</span>
+          <span class="text-[11px] text-neutral-500 font-mono">Pixel-wise 1D-FFT</span>
         </summary>
         <div class="p-4 space-y-4">
-          <div class="grid grid-cols-2 md:grid-cols-5 gap-4 text-xs font-mono">
+          <div class="grid grid-cols-2 md:grid-cols-4 gap-4 text-xs font-mono">
             <div>
-              <label class="block text-slate-500 mb-1">Temporal Frequency Bin (f_n)</label>
-              <input id="cfgFftBin" type="number" value="1" min="1" max="10" onchange="runPptAnalysis()" class="w-full bg-slate-950 border border-slate-800 text-slate-200 rounded px-2 py-1">
+              <label class="block text-neutral-500 mb-1">Temporal Frequency Bin (f_n)</label>
+              <input id="cfgFftBin" type="number" value="1" min="1" max="10" onchange="runPptAnalysis()" class="w-full bg-neutral-50 border border-neutral-300 text-neutral-900 px-2 py-1">
             </div>
             <div>
-              <label class="block text-slate-500 mb-1">Phase Map Colormap</label>
-              <select id="cfgPhasePalette" onchange="runPptAnalysis()" class="w-full bg-slate-950 border border-slate-800 text-slate-200 rounded px-2 py-1">
-                <option value="Viridis">Viridis</option>
-                <option value="RdBu">RdBu (Diverging)</option>
-                <option value="Jet">Jet</option>
-              </select>
-            </div>
-            <div>
-              <label class="block text-slate-500 mb-1">Sequence Depth</label>
-              <div id="lblSequenceDepth" class="bg-slate-950 border border-slate-800 text-slate-200 rounded px-2 py-1 font-bold">0 frames</div>
+              <label class="block text-neutral-500 mb-1">Sequence Depth</label>
+              <div id="lblSequenceDepth" class="bg-neutral-50 border border-neutral-300 text-neutral-900 px-2 py-1 font-bold">0 frames</div>
             </div>
             <div class="col-span-2 flex items-end">
-              <button onclick="runPptAnalysis()" class="w-full bg-slate-800 hover:bg-slate-700 text-slate-100 border border-slate-600 px-4 py-1.5 rounded text-xs font-mono transition">
+              <button onclick="runPptAnalysis()" class="w-full bg-neutral-100 hover:bg-neutral-200 text-neutral-900 border border-neutral-500 px-4 py-1.5 text-xs font-mono">
                 COMPUTE PPT (PHASE &amp; AMPLITUDE)
               </button>
             </div>
           </div>
 
           <div class="grid grid-cols-1 md:grid-cols-2 gap-4 pt-2">
-            <div class="bg-slate-950 p-3 rounded border border-slate-800">
-              <h4 class="text-[11px] font-bold font-mono text-slate-400 mb-2">PPT PHASE MAP (&phi; in Radians) &mdash; Subsurface Defects</h4>
+            <div class="bg-neutral-50 p-3 border border-neutral-300">
+              <h4 class="text-[11px] font-bold font-mono text-neutral-600 mb-2">PPT PHASE MAP (&phi; in Radians) &mdash; Subsurface Defects</h4>
               <div id="pptPhasePlot" class="w-full h-72"></div>
             </div>
-            <div class="bg-slate-950 p-3 rounded border border-slate-800">
-              <h4 class="text-[11px] font-bold font-mono text-slate-400 mb-2">PPT AMPLITUDE MAP (A in Arbitrary Units)</h4>
+            <div class="bg-neutral-50 p-3 border border-neutral-300">
+              <h4 class="text-[11px] font-bold font-mono text-neutral-600 mb-2">PPT AMPLITUDE MAP (A in Arbitrary Units)</h4>
               <div id="pptAmpPlot" class="w-full h-72"></div>
             </div>
           </div>
 
-          <div class="bg-slate-950 p-3 rounded border border-slate-800 mt-3">
+          <div class="bg-neutral-50 p-3 border border-neutral-300 mt-3">
             <div class="flex justify-between items-center mb-2">
-              <h4 class="text-[11px] font-bold font-mono text-slate-400">TSR POINT PROFILE &amp; 1ST/2ND TIME DERIVATIVES (P1)</h4>
-              <span class="text-[10px] text-slate-500 font-mono">Thermal Decay &amp; Inflection</span>
+              <h4 class="text-[11px] font-bold font-mono text-neutral-600">TSR POINT PROFILE &amp; 1ST/2ND TIME DERIVATIVES (P1)</h4>
+              <span class="text-[10px] text-neutral-500 font-mono">Thermal Decay &amp; Inflection</span>
             </div>
             <div id="tsrDerivativePlot" class="w-full h-52"></div>
           </div>
         </div>
       </details>
-      <!-- COLLAPSIBLE: PRINCIPAL COMPONENT THERMOGRAPHY (PCT) -->
-      <details class="group bg-slate-900 border border-slate-800 rounded-lg overflow-hidden">
-        <summary class="flex justify-between items-center p-4 cursor-pointer select-none bg-slate-900 hover:bg-slate-800/60 transition border-b border-transparent group-open:border-slate-800">
+      <!-- PCT -->
+      <details class="group bg-white border border-neutral-300 overflow-hidden">
+        <summary class="flex justify-between items-center p-4 cursor-pointer select-none bg-white hover:bg-neutral-100 border-b border-transparent group-open:border-neutral-300">
           <div class="flex items-center gap-2">
-            <svg class="w-4 h-4 text-slate-400 transform transition-transform group-open:rotate-90" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <svg class="w-4 h-4 text-neutral-600 transform group-open:rotate-90" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
             </svg>
-            <h3 class="text-xs font-bold font-mono text-slate-300">PRINCIPAL COMPONENT THERMOGRAPHY (PCT / SVD MODES)</h3>
+            <h3 class="text-xs font-bold font-mono text-neutral-800">PRINCIPAL COMPONENT THERMOGRAPHY (PCT / SVD MODES)</h3>
           </div>
-          <span class="text-[11px] text-slate-500 font-mono">Empirical Orthogonal Functions (EOF 1, 2, 3)</span>
+          <span class="text-[11px] text-neutral-500 font-mono">Empirical Orthogonal Functions (EOF 1, 2, 3)</span>
         </summary>
 
         <div class="p-4 space-y-4">
-          <div class="grid grid-cols-1 md:grid-cols-4 gap-4 text-xs font-mono">
+          <div class="grid grid-cols-1 md:grid-cols-3 gap-4 text-xs font-mono">
             <div>
-              <label class="block text-slate-500 mb-1">Active EOF Component</label>
-              <select id="cfgPctMode" onchange="runPctAnalysis()" class="w-full bg-slate-950 border border-slate-800 text-slate-200 rounded px-2 py-1.5 focus:outline-none">
+              <label class="block text-neutral-500 mb-1">Active EOF Component</label>
+              <select id="cfgPctMode" onchange="runPctAnalysis()" class="w-full bg-neutral-50 border border-neutral-300 text-neutral-900 px-2 py-1.5 focus:outline-none">
                 <option value="1">EOF 1 (Dominant Background Mode)</option>
                 <option value="2" selected>EOF 2 (Transient Anomaly Mode)</option>
                 <option value="3">EOF 3 (High-Frequency Diffusion Mode)</option>
               </select>
             </div>
             <div>
-              <label class="block text-slate-500 mb-1">Color Palette</label>
-              <select id="cfgPctPalette" onchange="runPctAnalysis()" class="w-full bg-slate-950 border border-slate-800 text-slate-200 rounded px-2 py-1.5 focus:outline-none">
-                <option value="Viridis">Viridis</option>
-                <option value="RdBu">RdBu (Diverging)</option>
-                <option value="Jet">Jet</option>
-                <option value="Plasma">Plasma</option>
-              </select>
-            </div>
-            <div>
-              <label class="block text-slate-500 mb-1">Variance Explained</label>
-              <div id="lblPctVariance" class="bg-slate-950 border border-slate-800 text-slate-200 rounded px-2 py-1.5 font-bold">-- %</div>
+              <label class="block text-neutral-500 mb-1">Variance Explained</label>
+              <div id="lblPctVariance" class="bg-neutral-50 border border-neutral-300 text-neutral-900 px-2 py-1.5 font-bold">-- %</div>
             </div>
             <div class="flex items-end">
-              <button onclick="runPctAnalysis()" class="w-full bg-slate-800 hover:bg-slate-700 text-slate-100 border border-slate-600 px-4 py-1.5 rounded text-xs font-mono transition">
+              <button onclick="runPctAnalysis()" class="w-full bg-neutral-100 hover:bg-neutral-200 text-neutral-900 border border-neutral-500 px-4 py-1.5 text-xs font-mono">
                 EXECUTE PCT SVD
               </button>
             </div>
           </div>
 
-          <!-- PCT Visualizations -->
           <div class="grid grid-cols-1 md:grid-cols-2 gap-4 pt-2">
-            <div class="bg-slate-950 p-3 rounded border border-slate-800">
-              <h4 class="text-[11px] font-bold font-mono text-slate-400 mb-2">PCT EIGEN-SURFACE MAP (EOF Spatial Mode)</h4>
+            <div class="bg-neutral-50 p-3 border border-neutral-300">
+              <h4 class="text-[11px] font-bold font-mono text-neutral-600 mb-2">PCT EIGEN-SURFACE MAP (EOF Spatial Mode)</h4>
               <div id="pctSpatialPlot" class="w-full h-72"></div>
             </div>
-            <div class="bg-slate-950 p-3 rounded border border-slate-800">
-              <h4 class="text-[11px] font-bold font-mono text-slate-400 mb-2">EIGENVALUE SPECTRUM (% Variance by Component)</h4>
+            <div class="bg-neutral-50 p-3 border border-neutral-300">
+              <h4 class="text-[11px] font-bold font-mono text-neutral-600 mb-2">EIGENVALUE SPECTRUM (% Variance by Component)</h4>
               <div id="pctScreePlot" class="w-full h-72"></div>
             </div>
           </div>
         </div>
       </details>
-      <!-- COLLAPSIBLE: MULTI-PARAMETER ASTM ATMOSPHERIC & OPTICAL CALIBRATION -->
-      <details class="group bg-slate-900 border border-slate-800 rounded-lg overflow-hidden">
-        <summary class="flex justify-between items-center p-4 cursor-pointer select-none bg-slate-900 hover:bg-slate-800/60 transition border-b border-transparent group-open:border-slate-800">
+      <!-- ASTM calibration -->
+      <details class="group bg-white border border-neutral-300 overflow-hidden">
+        <summary class="flex justify-between items-center p-4 cursor-pointer select-none bg-white hover:bg-neutral-100 border-b border-transparent group-open:border-neutral-300">
           <div class="flex items-center gap-2">
-            <svg class="w-4 h-4 text-slate-400 transform transition-transform group-open:rotate-90" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <svg class="w-4 h-4 text-neutral-600 transform group-open:rotate-90" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
             </svg>
-            <h3 class="text-xs font-bold font-mono text-slate-300">ASTM RADIOMETRIC ATMOSPHERE &amp; OPTICS CALIBRATION</h3>
+            <h3 class="text-xs font-bold font-mono text-neutral-800">ASTM RADIOMETRIC ATMOSPHERE &amp; OPTICS CALIBRATION</h3>
           </div>
           <div class="flex items-center gap-2" onclick="event.stopPropagation()">
-            <input id="chkEnableAstm" type="checkbox" onchange="triggerRecalibration()" class="rounded bg-slate-950 border-slate-700 text-slate-400">
-            <label for="chkEnableAstm" class="text-xs font-mono text-slate-300">Enable ASTM Physics</label>
+            <input id="chkEnableAstm" type="checkbox" onchange="triggerRecalibration()" class="bg-neutral-50 border-neutral-400 text-neutral-600">
+            <label for="chkEnableAstm" class="text-xs font-mono text-neutral-800">Enable ASTM Physics</label>
           </div>
         </summary>
 
         <div class="p-4 space-y-4">
           <div class="grid grid-cols-2 md:grid-cols-6 gap-4 text-xs font-mono">
             <div>
-              <label class="block text-slate-500 mb-1">Target Distance (m)</label>
-              <input id="cfgDistance" type="number" step="0.5" min="0.1" max="100.0" value="1.5" onchange="triggerRecalibration()" class="w-full bg-slate-950 border border-slate-800 text-slate-200 rounded px-2 py-1">
+              <label class="block text-neutral-500 mb-1">Target Distance (m)</label>
+              <input id="cfgDistance" type="number" step="0.5" min="0.1" max="100.0" value="1.5" onchange="triggerRecalibration()" class="w-full bg-neutral-50 border border-neutral-300 text-neutral-900 px-2 py-1">
             </div>
             <div>
-              <label class="block text-slate-500 mb-1">Relative Humidity (%)</label>
-              <input id="cfgHumidity" type="number" step="1" min="1" max="100" value="50" onchange="triggerRecalibration()" class="w-full bg-slate-950 border border-slate-800 text-slate-200 rounded px-2 py-1">
+              <label class="block text-neutral-500 mb-1">Relative Humidity (%)</label>
+              <input id="cfgHumidity" type="number" step="1" min="1" max="100" value="50" onchange="triggerRecalibration()" class="w-full bg-neutral-50 border border-neutral-300 text-neutral-900 px-2 py-1">
             </div>
             <div>
-              <label class="block text-slate-500 mb-1">Atmosphere Temp (&deg;C)</label>
-              <input id="cfgAtmTemp" type="number" step="0.5" value="20.0" onchange="triggerRecalibration()" class="w-full bg-slate-950 border border-slate-800 text-slate-200 rounded px-2 py-1">
+              <label class="block text-neutral-500 mb-1">Atmosphere Temp (&deg;C)</label>
+              <input id="cfgAtmTemp" type="number" step="0.5" value="20.0" onchange="triggerRecalibration()" class="w-full bg-neutral-50 border border-neutral-300 text-neutral-900 px-2 py-1">
             </div>
             <div>
-              <label class="block text-slate-500 mb-1">Reflected Temp (&deg;C)</label>
-              <input id="cfgReflTemp" type="number" step="0.5" value="20.0" onchange="triggerRecalibration()" class="w-full bg-slate-950 border border-slate-800 text-slate-200 rounded px-2 py-1">
+              <label class="block text-neutral-500 mb-1">Reflected Temp (&deg;C)</label>
+              <input id="cfgReflTemp" type="number" step="0.5" value="20.0" onchange="triggerRecalibration()" class="w-full bg-neutral-50 border border-neutral-300 text-neutral-900 px-2 py-1">
             </div>
             <div>
-              <label class="block text-slate-500 mb-1">Window Trans. (&tau;_win)</label>
-              <input id="cfgWinTrans" type="number" step="0.01" min="0.05" max="1.0" value="1.00" onchange="triggerRecalibration()" class="w-full bg-slate-950 border border-slate-800 text-slate-200 rounded px-2 py-1">
+              <label class="block text-neutral-500 mb-1">Window Trans. (&tau;_win)</label>
+              <input id="cfgWinTrans" type="number" step="0.01" min="0.05" max="1.0" value="1.00" onchange="triggerRecalibration()" class="w-full bg-neutral-50 border border-neutral-300 text-neutral-900 px-2 py-1">
             </div>
             <div>
-              <label class="block text-slate-500 mb-1">Window Temp (&deg;C)</label>
-              <input id="cfgWinTemp" type="number" step="0.5" value="20.0" onchange="triggerRecalibration()" class="w-full bg-slate-950 border border-slate-800 text-slate-200 rounded px-2 py-1">
+              <label class="block text-neutral-500 mb-1">Window Temp (&deg;C)</label>
+              <input id="cfgWinTemp" type="number" step="0.5" value="20.0" onchange="triggerRecalibration()" class="w-full bg-neutral-50 border border-neutral-300 text-neutral-900 px-2 py-1">
             </div>
           </div>
 
-          <!-- Live Atmospheric Transmission Readout & Error Difference Plot -->
           <div class="grid grid-cols-1 md:grid-cols-3 gap-4 pt-2">
-            <div class="bg-slate-950 p-3 rounded border border-slate-800 space-y-2 text-xs font-mono">
-              <span class="text-[11px] font-bold text-slate-400 uppercase">Calculated Optical Coupling</span>
-              <div class="flex justify-between border-b border-slate-900 pb-1">
-                <span class="text-slate-500">Atm Transmission (&tau;_atm):</span>
-                <span id="lblAtmTrans" class="text-slate-200 font-bold">1.000</span>
+            <div class="bg-neutral-50 p-3 border border-neutral-300 space-y-2 text-xs font-mono">
+              <span class="text-[11px] font-bold text-neutral-600 uppercase">Calculated Optical Coupling</span>
+              <div class="flex justify-between border-b border-neutral-200 pb-1">
+                <span class="text-neutral-500">Atm Transmission (&tau;_atm):</span>
+                <span id="lblAtmTrans" class="text-neutral-900 font-bold">1.000</span>
               </div>
-              <div class="flex justify-between border-b border-slate-900 pb-1">
-                <span class="text-slate-500">Total Optical Gain:</span>
-                <span id="lblTotalOptGain" class="text-slate-200 font-bold">1.000</span>
+              <div class="flex justify-between border-b border-neutral-200 pb-1">
+                <span class="text-neutral-500">Total Optical Gain:</span>
+                <span id="lblTotalOptGain" class="text-neutral-900 font-bold">1.000</span>
               </div>
               <div class="flex justify-between">
-                <span class="text-slate-500">Mean Correction Offset:</span>
-                <span id="lblMeanOffset" class="text-slate-200 font-bold">0.00 &deg;C</span>
+                <span class="text-neutral-500">Mean Correction Offset:</span>
+                <span id="lblMeanOffset" class="text-neutral-900 font-bold">0.00 &deg;C</span>
               </div>
             </div>
 
-            <div class="md:col-span-2 bg-slate-950 p-3 rounded border border-slate-800">
-              <h4 class="text-[11px] font-bold font-mono text-slate-400 mb-2">CALIBRATION OFFSET MAP (&Delta;T = T_corrected - T_raw &deg;C)</h4>
+            <div class="md:col-span-2 bg-neutral-50 p-3 border border-neutral-300">
+              <h4 class="text-[11px] font-bold font-mono text-neutral-600 mb-2">CALIBRATION OFFSET MAP (&Delta;T = T_corrected - T_raw &deg;C)</h4>
               <div id="astmCorrectionPlot" class="w-full h-44"></div>
             </div>
           </div>
         </div>
       </details>
-      <!-- COLLAPSIBLE: ADAPTIVE EMISSIVITY ZONING & SPATIAL FILTERING -->
-      <details class="group bg-slate-900 border border-slate-800 rounded-lg overflow-hidden">
-        <summary class="flex justify-between items-center p-4 cursor-pointer select-none bg-slate-900 hover:bg-slate-800/60 transition border-b border-transparent group-open:border-slate-800">
+      <!-- emissivity zones and spatial filter -->
+      <details class="group bg-white border border-neutral-300 overflow-hidden">
+        <summary class="flex justify-between items-center p-4 cursor-pointer select-none bg-white hover:bg-neutral-100 border-b border-transparent group-open:border-neutral-300">
           <div class="flex items-center gap-2">
-            <svg class="w-4 h-4 text-slate-400 transform transition-transform group-open:rotate-90" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <svg class="w-4 h-4 text-neutral-600 transform group-open:rotate-90" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
             </svg>
-            <h3 class="text-xs font-bold font-mono text-slate-300">ADAPTIVE EMISSIVITY ZONING &amp; SPATIAL FILTERING</h3>
+            <h3 class="text-xs font-bold font-mono text-neutral-800">ADAPTIVE EMISSIVITY ZONING &amp; SPATIAL FILTERING</h3>
           </div>
-          <span class="text-[11px] text-slate-500 font-mono">Pixel-wise &epsilon;(x,y) &amp; Bilateral Denoising</span>
+          <span class="text-[11px] text-neutral-500 font-mono">Pixel-wise &epsilon;(x,y) &amp; Bilateral Denoising</span>
         </summary>
 
         <div class="p-4 space-y-4">
-          <!-- SPATIAL FILTER CONTROLS -->
-          <div class="bg-slate-950 p-3 rounded border border-slate-800 space-y-2">
-            <div class="flex justify-between items-center border-b border-slate-900 pb-1.5">
-              <span class="text-[11px] font-bold text-slate-400 font-mono uppercase">1. Edge-Preserving Bilateral Spatial Filter</span>
+          <div class="bg-neutral-50 p-3 border border-neutral-300 space-y-2">
+            <div class="flex justify-between items-center border-b border-neutral-200 pb-1.5">
+              <span class="text-[11px] font-bold text-neutral-600 font-mono uppercase">1. Edge-Preserving Bilateral Spatial Filter</span>
               <div class="flex items-center gap-2">
-                <input id="chkEnableBilateral" type="checkbox" onchange="triggerRecalibration()" class="rounded bg-slate-900 border-slate-700 text-slate-400">
-                <label for="chkEnableBilateral" class="text-xs font-mono text-slate-300">Enable Denoising</label>
+                <input id="chkEnableBilateral" type="checkbox" onchange="triggerRecalibration()" class="bg-white border-neutral-400 text-neutral-600">
+                <label for="chkEnableBilateral" class="text-xs font-mono text-neutral-800">Enable Denoising</label>
               </div>
             </div>
             <div class="grid grid-cols-1 md:grid-cols-3 gap-4 text-xs font-mono pt-1">
               <div>
-                <label class="block text-slate-500 mb-1">Filter Kernel Radius ($r$ px)</label>
-                <input id="cfgFilterRadius" type="number" min="1" max="5" value="2" onchange="triggerRecalibration()" class="w-full bg-slate-900 border border-slate-800 text-slate-200 rounded px-2 py-1">
+                <label class="block text-neutral-500 mb-1">Filter Kernel Radius ($r$ px)</label>
+                <input id="cfgFilterRadius" type="number" min="1" max="5" value="2" onchange="triggerRecalibration()" class="w-full bg-white border border-neutral-300 text-neutral-900 px-2 py-1">
               </div>
               <div>
-                <label class="block text-slate-500 mb-1">Spatial Sigma ($\sigma_{\text{space}}$)</label>
-                <input id="cfgSigmaSpace" type="number" step="0.5" min="0.5" max="10.0" value="2.5" onchange="triggerRecalibration()" class="w-full bg-slate-900 border border-slate-800 text-slate-200 rounded px-2 py-1">
+                <label class="block text-neutral-500 mb-1">Spatial Sigma ($\sigma_{\text{space}}$)</label>
+                <input id="cfgSigmaSpace" type="number" step="0.5" min="0.5" max="10.0" value="2.5" onchange="triggerRecalibration()" class="w-full bg-white border border-neutral-300 text-neutral-900 px-2 py-1">
               </div>
               <div>
-                <label class="block text-slate-500 mb-1">Range/NETD Sigma ($\sigma_{\text{color}}$ in &deg;C)</label>
-                <input id="cfgSigmaColor" type="number" step="0.1" min="0.1" max="10.0" value="1.2" onchange="triggerRecalibration()" class="w-full bg-slate-900 border border-slate-800 text-slate-200 rounded px-2 py-1">
+                <label class="block text-neutral-500 mb-1">Range/NETD Sigma ($\sigma_{\text{color}}$ in &deg;C)</label>
+                <input id="cfgSigmaColor" type="number" step="0.1" min="0.1" max="10.0" value="1.2" onchange="triggerRecalibration()" class="w-full bg-white border border-neutral-300 text-neutral-900 px-2 py-1">
               </div>
             </div>
           </div>
 
-          <!-- ADAPTIVE EMISSIVITY ZONES TABLE -->
-          <div class="bg-slate-950 p-3 rounded border border-slate-800 space-y-3">
-            <div class="flex justify-between items-center border-b border-slate-900 pb-1.5">
-              <span class="text-[11px] font-bold text-slate-400 font-mono uppercase">2. Material Emissivity Segmentation Zones</span>
+          <div class="bg-neutral-50 p-3 border border-neutral-300 space-y-3">
+            <div class="flex justify-between items-center border-b border-neutral-200 pb-1.5">
+              <span class="text-[11px] font-bold text-neutral-600 font-mono uppercase">2. Material Emissivity Segmentation Zones</span>
               <div class="flex items-center gap-2">
-                <input id="chkEnableZoning" type="checkbox" onchange="triggerRecalibration()" class="rounded bg-slate-900 border-slate-700 text-slate-400">
-                <label for="chkEnableZoning" class="text-xs font-mono text-slate-300">Enable Zoned Radiometry</label>
+                <input id="chkEnableZoning" type="checkbox" onchange="triggerRecalibration()" class="bg-white border-neutral-400 text-neutral-600">
+                <label for="chkEnableZoning" class="text-xs font-mono text-neutral-800">Enable Zoned Radiometry</label>
               </div>
             </div>
 
             <div class="grid grid-cols-2 md:grid-cols-5 gap-3 text-xs font-mono">
               <div>
-                <label class="block text-slate-500 mb-1">Zone Name</label>
-                <input id="zoneName" type="text" placeholder="e.g. Copper Trace" class="w-full bg-slate-900 border border-slate-800 text-slate-200 rounded px-2 py-1">
+                <label class="block text-neutral-500 mb-1">Zone Name</label>
+                <input id="zoneName" type="text" placeholder="e.g. Copper Trace" class="w-full bg-white border border-neutral-300 text-neutral-900 px-2 py-1">
               </div>
               <div>
-                <label class="block text-slate-500 mb-1">Min Temp Threshold (&deg;C)</label>
-                <input id="zoneMinTemp" type="number" step="0.5" value="28.0" class="w-full bg-slate-900 border border-slate-800 text-slate-200 rounded px-2 py-1">
+                <label class="block text-neutral-500 mb-1">Min Temp Threshold (&deg;C)</label>
+                <input id="zoneMinTemp" type="number" step="0.5" value="28.0" class="w-full bg-white border border-neutral-300 text-neutral-900 px-2 py-1">
               </div>
               <div>
-                <label class="block text-slate-500 mb-1">Max Temp Threshold (&deg;C)</label>
-                <input id="zoneMaxTemp" type="number" step="0.5" value="38.0" class="w-full bg-slate-900 border border-slate-800 text-slate-200 rounded px-2 py-1">
+                <label class="block text-neutral-500 mb-1">Max Temp Threshold (&deg;C)</label>
+                <input id="zoneMaxTemp" type="number" step="0.5" value="38.0" class="w-full bg-white border border-neutral-300 text-neutral-900 px-2 py-1">
               </div>
               <div>
-                <label class="block text-slate-500 mb-1">Material &epsilon; (0.05 - 1.0)</label>
-                <input id="zoneEmissivity" type="number" step="0.01" min="0.05" max="1.0" value="0.30" class="w-full bg-slate-900 border border-slate-800 text-slate-200 rounded px-2 py-1">
+                <label class="block text-neutral-500 mb-1">Material &epsilon; (0.05 - 1.0)</label>
+                <input id="zoneEmissivity" type="number" step="0.01" min="0.05" max="1.0" value="0.30" class="w-full bg-white border border-neutral-300 text-neutral-900 px-2 py-1">
               </div>
               <div class="flex items-end">
-                <button type="button" onclick="addEmissivityZone()" class="w-full bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 px-3 py-1 rounded text-xs font-mono transition">
+                <button type="button" onclick="addEmissivityZone()" class="w-full bg-neutral-100 hover:bg-neutral-200 text-neutral-900 border border-neutral-400 px-3 py-1 text-xs font-mono">
                   + ADD ZONE
                 </button>
               </div>
             </div>
 
-            <!-- Active Zones List -->
             <div class="overflow-x-auto">
-              <table class="w-full text-left border-collapse text-xs font-mono text-slate-300 mt-2">
+              <table class="w-full text-left border-collapse text-xs font-mono text-neutral-800 mt-2">
                 <thead>
-                  <tr class="border-b border-slate-800 text-slate-500 uppercase">
+                  <tr class="border-b border-neutral-300 text-neutral-500 uppercase">
                     <th class="py-1 px-2">Zone</th>
                     <th class="py-1 px-2">Temp Range</th>
                     <th class="py-1 px-2">Emissivity (&epsilon;)</th>
@@ -695,7 +623,7 @@
                   </tr>
                 </thead>
                 <tbody id="tblEmissivityZones">
-                  <tr class="border-b border-slate-900 text-slate-500 italic">
+                  <tr class="border-b border-neutral-200 text-neutral-500 italic">
                     <td colspan="4" class="py-2 px-2 text-center">No custom zones added. (Default baseline emissivity applied to entire scene).</td>
                   </tr>
                 </tbody>
@@ -704,23 +632,23 @@
           </div>
         </div>
       </details>
-      <!-- COLLAPSIBLE: 2D CONDUCTIVE HEAT FLUX VECTOR FIELD -->
-      <details class="group bg-slate-900 border border-slate-800 rounded-lg overflow-hidden">
-        <summary class="flex justify-between items-center p-4 cursor-pointer select-none bg-slate-900 hover:bg-slate-800/60 transition border-b border-transparent group-open:border-slate-800">
+      <!-- heat flux field -->
+      <details class="group bg-white border border-neutral-300 overflow-hidden">
+        <summary class="flex justify-between items-center p-4 cursor-pointer select-none bg-white hover:bg-neutral-100 border-b border-transparent group-open:border-neutral-300">
           <div class="flex items-center gap-2">
-            <svg class="w-4 h-4 text-slate-400 transform transition-transform group-open:rotate-90" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <svg class="w-4 h-4 text-neutral-600 transform group-open:rotate-90" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
             </svg>
-            <h3 class="text-xs font-bold font-mono text-slate-300">2D CONDUCTIVE HEAT FLUX VECTOR FIELD (q = -k&nabla;T)</h3>
+            <h3 class="text-xs font-bold font-mono text-neutral-800">2D CONDUCTIVE HEAT FLUX VECTOR FIELD (q = -k&nabla;T)</h3>
           </div>
-          <span class="text-[11px] text-slate-500 font-mono">Fourier Conduction Dynamics</span>
+          <span class="text-[11px] text-neutral-500 font-mono">Fourier Conduction Dynamics</span>
         </summary>
 
         <div class="p-4 space-y-4">
           <div class="grid grid-cols-2 md:grid-cols-5 gap-4 text-xs font-mono">
             <div>
-              <label class="block text-slate-500 mb-1">Material Preset</label>
-              <select id="cfgFluxMaterial" onchange="handleFluxMaterialPreset()" class="w-full bg-slate-950 border border-slate-800 text-slate-200 rounded px-2 py-1.5 focus:outline-none">
+              <label class="block text-neutral-500 mb-1">Material Preset</label>
+              <select id="cfgFluxMaterial" onchange="handleFluxMaterialPreset()" class="w-full bg-neutral-50 border border-neutral-300 text-neutral-900 px-2 py-1.5 focus:outline-none">
                 <option value="400">Copper (400 W/m&middot;K)</option>
                 <option value="237">Aluminum (237 W/m&middot;K)</option>
                 <option value="150">Silicon (150 W/m&middot;K)</option>
@@ -730,121 +658,117 @@
               </select>
             </div>
             <div>
-              <label class="block text-slate-500 mb-1">Conductivity $k$ (W/m&middot;K)</label>
-              <input id="cfgConductivity" type="number" step="0.1" min="0.01" value="400" onchange="replotHeatFlux()" class="w-full bg-slate-950 border border-slate-800 text-slate-200 rounded px-2 py-1.5">
+              <label class="block text-neutral-500 mb-1">Conductivity $k$ (W/m&middot;K)</label>
+              <input id="cfgConductivity" type="number" step="0.1" min="0.01" value="400" onchange="replotHeatFlux()" class="w-full bg-neutral-50 border border-neutral-300 text-neutral-900 px-2 py-1.5">
             </div>
             <div>
-              <label class="block text-slate-500 mb-1">Pixel Pitch $\Delta x$ (mm)</label>
-              <input id="cfgPixelPitchMm" type="number" step="0.1" min="0.05" value="1.0" onchange="replotHeatFlux()" class="w-full bg-slate-950 border border-slate-800 text-slate-200 rounded px-2 py-1.5">
+              <label class="block text-neutral-500 mb-1">Pixel Pitch $\Delta x$ (mm)</label>
+              <input id="cfgPixelPitchMm" type="number" step="0.1" min="0.05" value="1.0" onchange="replotHeatFlux()" class="w-full bg-neutral-50 border border-neutral-300 text-neutral-900 px-2 py-1.5">
             </div>
             <div>
-              <label class="block text-slate-500 mb-1">Vector Grid Density</label>
-              <select id="cfgFluxDensity" onchange="replotHeatFlux()" class="w-full bg-slate-950 border border-slate-800 text-slate-200 rounded px-2 py-1.5 focus:outline-none">
+              <label class="block text-neutral-500 mb-1">Vector Grid Density</label>
+              <select id="cfgFluxDensity" onchange="replotHeatFlux()" class="w-full bg-neutral-50 border border-neutral-300 text-neutral-900 px-2 py-1.5 focus:outline-none">
                 <option value="3">Dense (Step 3 px)</option>
                 <option value="5" selected>Balanced (Step 5 px)</option>
                 <option value="8">Sparse (Step 8 px)</option>
               </select>
             </div>
             <div class="flex items-end">
-              <button onclick="replotHeatFlux()" class="w-full bg-slate-800 hover:bg-slate-700 text-slate-100 border border-slate-600 px-4 py-1.5 rounded text-xs font-mono transition">
+              <button onclick="replotHeatFlux()" class="w-full bg-neutral-100 hover:bg-neutral-200 text-neutral-900 border border-neutral-500 px-4 py-1.5 text-xs font-mono">
                 RECOMPUTE FLUX
               </button>
             </div>
           </div>
 
-          <!-- Telemetry Readouts -->
           <div class="grid grid-cols-1 md:grid-cols-3 gap-3 text-xs font-mono">
-            <div class="bg-slate-950 p-2.5 rounded border border-slate-800 flex justify-between">
-              <span class="text-slate-500">Peak Heat Flux ($|\vec{q}|_{\max}$):</span>
-              <span id="lblPeakFlux" class="text-rose-400 font-bold">-- kW/m&sup2;</span>
+            <div class="bg-neutral-50 p-2.5 border border-neutral-300 flex justify-between">
+              <span class="text-neutral-500">Peak Heat Flux ($|\vec{q}|_{\max}$):</span>
+              <span id="lblPeakFlux" class="text-neutral-700 font-bold">-- kW/m&sup2;</span>
             </div>
-            <div class="bg-slate-950 p-2.5 rounded border border-slate-800 flex justify-between">
-              <span class="text-slate-500">Mean Flux Density:</span>
-              <span id="lblMeanFlux" class="text-sky-400 font-bold">-- kW/m&sup2;</span>
+            <div class="bg-neutral-50 p-2.5 border border-neutral-300 flex justify-between">
+              <span class="text-neutral-500">Mean Flux Density:</span>
+              <span id="lblMeanFlux" class="text-neutral-700 font-bold">-- kW/m&sup2;</span>
             </div>
-            <div class="bg-slate-950 p-2.5 rounded border border-slate-800 flex justify-between">
-              <span class="text-slate-500">Max Conduction Location:</span>
-              <span id="lblMaxFluxCoord" class="text-slate-200 font-bold">(--, --)</span>
+            <div class="bg-neutral-50 p-2.5 border border-neutral-300 flex justify-between">
+              <span class="text-neutral-500">Max Conduction Location:</span>
+              <span id="lblMaxFluxCoord" class="text-neutral-900 font-bold">(--, --)</span>
             </div>
           </div>
 
-          <!-- Visualizations -->
           <div class="grid grid-cols-1 md:grid-cols-2 gap-4 pt-1">
-            <div class="bg-slate-950 p-3 rounded border border-slate-800">
-              <h4 class="text-[11px] font-bold font-mono text-slate-400 mb-2">HEAT FLUX VECTOR QUIVER OVERLAY (&vec;q Vectors on T)</h4>
+            <div class="bg-neutral-50 p-3 border border-neutral-300">
+              <h4 class="text-[11px] font-bold font-mono text-neutral-600 mb-2">HEAT FLUX VECTOR QUIVER OVERLAY (&vec;q Vectors on T)</h4>
               <div id="fluxQuiverPlot" class="w-full h-80"></div>
             </div>
-            <div class="bg-slate-950 p-3 rounded border border-slate-800">
-              <h4 class="text-[11px] font-bold font-mono text-slate-400 mb-2">HEAT FLUX DENSITY MAGNITUDE (|&vec;q| in kW/m&sup2;)</h4>
+            <div class="bg-neutral-50 p-3 border border-neutral-300">
+              <h4 class="text-[11px] font-bold font-mono text-neutral-600 mb-2">HEAT FLUX DENSITY MAGNITUDE (|&vec;q| in kW/m&sup2;)</h4>
               <div id="fluxMagnitudePlot" class="w-full h-80"></div>
             </div>
           </div>
         </div>
       </details>
-      <!-- COLLAPSIBLE: TRANSIENT THERMAL TIME CONSTANT (TAU = R_TH * C_TH) -->
-      <details class="group bg-slate-900 border border-slate-800 rounded-lg overflow-hidden">
-        <summary class="flex justify-between items-center p-4 cursor-pointer select-none bg-slate-900 hover:bg-slate-800/60 transition border-b border-transparent group-open:border-slate-800">
+      <!-- thermal time constant -->
+      <details class="group bg-white border border-neutral-300 overflow-hidden">
+        <summary class="flex justify-between items-center p-4 cursor-pointer select-none bg-white hover:bg-neutral-100 border-b border-transparent group-open:border-neutral-300">
           <div class="flex items-center gap-2">
-            <svg class="w-4 h-4 text-slate-400 transform transition-transform group-open:rotate-90" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <svg class="w-4 h-4 text-neutral-600 transform group-open:rotate-90" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
             </svg>
-            <h3 class="text-xs font-bold font-mono text-slate-300">TRANSIENT THERMAL TIME CONSTANT FIT (&tau; = R_th &middot; C_th)</h3>
+            <h3 class="text-xs font-bold font-mono text-neutral-800">TRANSIENT THERMAL TIME CONSTANT FIT (&tau; = R_th &middot; C_th)</h3>
           </div>
-          <span class="text-[11px] text-slate-500 font-mono">Lumped Newton Cooling &amp; Dissipation Kinetics</span>
+          <span class="text-[11px] text-neutral-500 font-mono">Lumped Newton Cooling &amp; Dissipation Kinetics</span>
         </summary>
 
         <div class="p-4 space-y-4">
           <div class="grid grid-cols-2 md:grid-cols-5 gap-4 text-xs font-mono">
             <div>
-              <label class="block text-slate-500 mb-1">Probe Inspection Point</label>
-              <select id="cfgTauProbe" onchange="runTransientTauFit()" class="w-full bg-slate-950 border border-slate-800 text-slate-200 rounded px-2 py-1.5 focus:outline-none">
+              <label class="block text-neutral-500 mb-1">Probe Inspection Point</label>
+              <select id="cfgTauProbe" onchange="runTransientTauFit()" class="w-full bg-neutral-50 border border-neutral-300 text-neutral-900 px-2 py-1.5 focus:outline-none">
                 <option value="p1" selected>Point 1 (P1)</option>
                 <option value="p2">Point 2 (P2)</option>
                 <option value="hotspot">Peak Hotspot Coordinate</option>
               </select>
             </div>
             <div>
-              <label class="block text-slate-500 mb-1">Time Delta per Frame ($\Delta t$ sec)</label>
-              <input id="cfgTimeStepSec" type="number" step="0.1" min="0.01" value="1.0" onchange="runTransientTauFit()" class="w-full bg-slate-950 border border-slate-800 text-slate-200 rounded px-2 py-1.5">
+              <label class="block text-neutral-500 mb-1">Time Delta per Frame ($\Delta t$ sec)</label>
+              <input id="cfgTimeStepSec" type="number" step="0.1" min="0.01" value="1.0" onchange="runTransientTauFit()" class="w-full bg-neutral-50 border border-neutral-300 text-neutral-900 px-2 py-1.5">
             </div>
             <div>
-              <label class="block text-slate-500 mb-1">Asymptotic $T_\infty$ (&deg;C)</label>
-              <input id="cfgAsymptoticTemp" type="number" step="0.5" value="22.0" onchange="runTransientTauFit()" class="w-full bg-slate-950 border border-slate-800 text-slate-200 rounded px-2 py-1.5">
+              <label class="block text-neutral-500 mb-1">Asymptotic $T_\infty$ (&deg;C)</label>
+              <input id="cfgAsymptoticTemp" type="number" step="0.5" value="22.0" onchange="runTransientTauFit()" class="w-full bg-neutral-50 border border-neutral-300 text-neutral-900 px-2 py-1.5">
             </div>
             <div>
-              <label class="block text-slate-500 mb-1">Applied Power $P_{\text{diss}}$ (W)</label>
-              <input id="cfgAppliedPower" type="number" step="0.5" min="0.01" value="5.0" onchange="runTransientTauFit()" class="w-full bg-slate-950 border border-slate-800 text-slate-200 rounded px-2 py-1.5">
+              <label class="block text-neutral-500 mb-1">Applied Power $P_{\text{diss}}$ (W)</label>
+              <input id="cfgAppliedPower" type="number" step="0.5" min="0.01" value="5.0" onchange="runTransientTauFit()" class="w-full bg-neutral-50 border border-neutral-300 text-neutral-900 px-2 py-1.5">
             </div>
             <div class="flex items-end">
-              <button onclick="runTransientTauFit()" class="w-full bg-slate-800 hover:bg-slate-700 text-slate-100 border border-slate-600 px-4 py-1.5 rounded text-xs font-mono transition">
+              <button onclick="runTransientTauFit()" class="w-full bg-neutral-100 hover:bg-neutral-200 text-neutral-900 border border-neutral-500 px-4 py-1.5 text-xs font-mono">
                 EXECUTE &tau; FIT
               </button>
             </div>
           </div>
 
-          <!-- Telemetry Readouts -->
           <div class="grid grid-cols-2 md:grid-cols-4 gap-3 text-xs font-mono">
-            <div class="bg-slate-950 p-2.5 rounded border border-slate-800">
-              <span class="text-slate-500 block">Time Constant (&tau;):</span>
-              <span id="lblTauValue" class="text-amber-400 font-bold text-sm">-- s</span>
+            <div class="bg-neutral-50 p-2.5 border border-neutral-300">
+              <span class="text-neutral-500 block">Time Constant (&tau;):</span>
+              <span id="lblTauValue" class="text-neutral-700 font-bold text-sm">-- s</span>
             </div>
-            <div class="bg-slate-950 p-2.5 rounded border border-slate-800">
-              <span class="text-slate-500 block">Goodness of Fit ($R^2$):</span>
-              <span id="lblTauR2" class="text-emerald-400 font-bold text-sm">--</span>
+            <div class="bg-neutral-50 p-2.5 border border-neutral-300">
+              <span class="text-neutral-500 block">Goodness of Fit ($R^2$):</span>
+              <span id="lblTauR2" class="text-neutral-700 font-bold text-sm">--</span>
             </div>
-            <div class="bg-slate-950 p-2.5 rounded border border-slate-800">
-              <span class="text-slate-500 block">Thermal Resistance ($R_{\text{th}}$):</span>
-              <span id="lblRthValue" class="text-sky-400 font-bold text-sm">-- K/W</span>
+            <div class="bg-neutral-50 p-2.5 border border-neutral-300">
+              <span class="text-neutral-500 block">Thermal Resistance ($R_{\text{th}}$):</span>
+              <span id="lblRthValue" class="text-neutral-700 font-bold text-sm">-- K/W</span>
             </div>
-            <div class="bg-slate-950 p-2.5 rounded border border-slate-800">
-              <span class="text-slate-500 block">Thermal Capacitance ($C_{\text{th}}$):</span>
-              <span id="lblCthValue" class="text-fuchsia-400 font-bold text-sm">-- J/K</span>
+            <div class="bg-neutral-50 p-2.5 border border-neutral-300">
+              <span class="text-neutral-500 block">Thermal Capacitance ($C_{\text{th}}$):</span>
+              <span id="lblCthValue" class="text-neutral-700 font-bold text-sm">-- J/K</span>
             </div>
           </div>
 
-          <!-- Interactive Decay Curve & Regression Plot -->
-          <div class="bg-slate-950 p-3 rounded border border-slate-800">
-            <h4 class="text-[11px] font-bold font-mono text-slate-400 mb-2">TRANSIENT DECAY CURVE WITH EXPONENTIAL FIT</h4>
+          <div class="bg-neutral-50 p-3 border border-neutral-300">
+            <h4 class="text-[11px] font-bold font-mono text-neutral-600 mb-2">TRANSIENT DECAY CURVE WITH EXPONENTIAL FIT</h4>
             <div id="tauDecayPlot" class="w-full h-64"></div>
           </div>
         </div>
@@ -852,7 +776,6 @@
     </div>
   </div>
 
-  <!-- Custom Application Modules -->
   <script src="js/apiConfig.js"></script>
   <script src="js/thermalEngine.js"></script>
   <script src="js/gifEngine.js"></script>

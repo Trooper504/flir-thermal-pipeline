@@ -1,37 +1,16 @@
-// --- webapp/js/maskEngine.js ---
-// Global polygonal masking math for the Mask Studio: draw ONE closed polygon on a
-// thermogram, rasterise it once into a boolean cookie-cutter, then reuse that mask
-// for every frame in the album without re-doing the geometry work.
-//
-// DOM-free pure functions so the whole path stays testable outside the browser.
-// Depends on:
-//   * microEngine.js -> computePatchStatistics() (min/max/mean/median/MAD engine)
-//
-// Coordinate convention (identical to the rest of the pipeline): matrices are
-// row-major, i.e. matrix[Y][X]. Every mask in this file is likewise indexed
-// mask[y - bbox.y0][x - bbox.x0] -- never mask[x][y].
+// Polygon masking: parse the drawn SVG path, rasterise it once into a boolean mask over its
+// bounding box, then reuse that mask for every frame. Pure functions, no DOM.
+// Matrices are matrix[Y][X]; masks are mask[y - bbox.y0][x - bbox.x0].
 
-// ============================================================================
-// 1. SVG PATH -> MATRIX COORDINATES
-// ============================================================================
-
-// Plotly hands the drawn lasso back as an SVG path string, e.g.
-//   "M 12.5 20.3 L 13.1 21.9 L 20.4 25.0 Z"
-// The regex below is a tokeniser, not a parser: command letters and numbers.
+// Plotly returns the lasso as an SVG path ("M 12.5 20.3 L 13.1 21.9 Z"), so this only has to
+// tokenise command letters and numbers.
 const SVG_PATH_TOKEN = /([MmLlHhVvZzCcSsQqTtAa])|(-?(?:\d+\.?\d*|\.\d+)(?:[eE][-+]?\d+)?)/g;
 const SVG_PATH_NUMBER = /^-?(?:\d+\.?\d*|\.\d+)(?:[eE][-+]?\d+)?$/;
 
-// Argument count per command. For curves only the on-curve endpoint is kept, which
-// is exactly what a polygon rasteriser needs (freehand lassos are straight L runs).
+// Argument count per command. Curves contribute their on-curve endpoint only, which is all a
+// polygon rasteriser needs.
 const SVG_PATH_ARITY = { M: 2, L: 2, T: 2, H: 1, V: 1, C: 6, S: 4, Q: 4, A: 7 };
 
-/**
- * Parses an SVG path string into absolute data-space vertices.
- * Supports absolute and relative forms plus implicit repeated coordinates
- * ("M 1 2 3 4" == "M 1 2 L 3 4"). Curves contribute their endpoint only.
- *
- * @returns {{points: Array<{x:number,y:number}>, commands: Array<string>, closed: boolean, tokenCount: number}}
- */
 function parseSvgPathToPoints(pathString) {
   const tokens = String(pathString === undefined || pathString === null ? '' : pathString).match(SVG_PATH_TOKEN) || [];
   const points = [];
@@ -105,7 +84,7 @@ function parseSvgPathToPoints(pathString) {
   return { points, commands, closed, tokenCount: tokens.length };
 }
 
-/** Rounds vertices to whole pixels and collapses duplicates (incl. the closing vertex). */
+// Rounds vertices to whole pixels and collapses duplicates (incl. the closing vertex).
 function roundPolygonPoints(points) {
   const rounded = [];
   (points || []).forEach(p => {
@@ -126,10 +105,6 @@ function roundPolygonPoints(points) {
   return rounded;
 }
 
-/**
- * Phase 2 sanity check: are the decoded numbers matrix indices (data space) or
- * screen pixels? A polygon touching the frame at least once scores above zero.
- */
 function verifyCoordinateSpace(points, matWidth, matHeight) {
   const list = points || [];
   if (!list.length || !(matWidth > 0) || !(matHeight > 0)) {
@@ -160,7 +135,7 @@ function verifyCoordinateSpace(points, matWidth, matHeight) {
   };
 }
 
-/** Axis-aligned bounding box of the polygon, clamped to the frame. */
+// Axis-aligned bounding box of the polygon, clamped to the frame.
 function polygonBounds(points, matWidth, matHeight) {
   if (!points || !points.length) return null;
 
@@ -201,20 +176,11 @@ function polygonBounds(points, matWidth, matHeight) {
   };
 }
 
-// ============================================================================
-// 2. RAY CASTING -> REUSABLE BOOLEAN MASK (computed once, reused everywhere)
-// ============================================================================
-
-/**
- * Even-odd ray casting (a horizontal ray towards +x).
- *
- * The half-open edge rule `(yi > py) !== (yj > py)` is what stops a ray that lands
- * exactly on a vertex from being counted twice: an edge counts only if the test
- * point's y is >= the edge's lower y and strictly < its upper y.
- */
 function pointInPolygon(px, py, points) {
   if (!points || points.length < 3) return false;
 
+  // Half-open rule: an edge counts when py is >= its lower y and < its upper y, so a ray
+  // through a vertex is counted once instead of twice.
   let inside = false;
   for (let i = 0, j = points.length - 1; i < points.length; j = i++) {
     const yi = points[i].y;
@@ -229,10 +195,6 @@ function pointInPolygon(px, py, points) {
   return inside;
 }
 
-/**
- * Rasterises the polygon over its bounding box only.
- * Returns mask[y - bbox.y0][x - bbox.x0] === true for pixels whose centre is inside.
- */
 function buildPolygonMask(points, bbox) {
   const width = bbox ? bbox.width : 0;
   const height = bbox ? bbox.height : 0;
@@ -250,15 +212,6 @@ function buildPolygonMask(points, bbox) {
   return { mask, insideCount };
 }
 
-/**
- * Builds the reusable global ROI state object that the UI stores in window.globalROI.
- *
- * @param {Array<{x:number,y:number}>} points vertices (data space, may be fractional)
- * @param {number} matWidth  frame width  (columns)
- * @param {number} matHeight frame height (rows)
- * @param {{source?:string}} [options]
- * @returns {object|null} null when the polygon cannot be reduced to 3+ whole pixels
- */
 function createGlobalRoi(points, matWidth, matHeight, options = {}) {
   const vertices = roundPolygonPoints(points);
   if (vertices.length < 3) return null;
@@ -287,7 +240,7 @@ function createGlobalRoi(points, matWidth, matHeight, options = {}) {
   };
 }
 
-/** Converts a drawn rectangle (x0/y0/x1/y1, data space) into polygon vertices. */
+// Converts a drawn rectangle (x0/y0/x1/y1, data space) into polygon vertices.
 function polygonFromRect(x0, y0, x1, y1) {
   const left = Math.min(x0, x1);
   const right = Math.max(x0, x1);
@@ -301,7 +254,7 @@ function polygonFromRect(x0, y0, x1, y1) {
   ];
 }
 
-/** Human-readable one-liner for the status bar / exports. */
+// Human-readable one-liner for the status bar / exports.
 function describeRoi(roi) {
   if (!roi || !roi.active) return 'no mask';
   const b = roi.bbox;
@@ -311,20 +264,12 @@ function describeRoi(roi) {
     + (b.clamped ? ' | clamped at frame edge' : '');
 }
 
-// ============================================================================
-// 3. EXTRACTION (THE COOKIE-CUTTER) AND ITS STATISTICS
-// ============================================================================
-
-/** True when the frame has exactly the pixel grid the mask was rasterised on. */
+// True when the frame has exactly the pixel grid the mask was rasterised on.
 function isRoiCompatible(matrix, roi) {
   if (!matrix || !matrix.length || !roi || !roi.active) return false;
   return matrix.length === roi.matHeight && matrix[0].length === roi.matWidth;
 }
 
-/**
- * Walks the bounding box only and returns the masked temperatures as a flat 1-D
- * array. Non-finite cells and out-of-frame indices are skipped, never coerced.
- */
 function extractMaskedValues(matrix, roi) {
   if (!matrix || !matrix.length || !roi || !roi.active) return [];
 
@@ -347,26 +292,20 @@ function extractMaskedValues(matrix, roi) {
   return values;
 }
 
-/**
- * Mask statistics for one frame.
- * The flat 1-D array is handed straight to the existing microEngine statistics
- * engine as a single-row matrix, so max/min/mean/median/MAD stay identical to the
- * Micro Inspector. A polygon that covers no pixel centre yields null, never NaN.
- */
 function computeMaskedStatistics(matrix, roi) {
   const values = extractMaskedValues(matrix, roi);
   if (!values.length) return null;
   return computePatchStatistics([values]);
 }
 
-/** Percentile clipping bounds computed over the masked pixels only. */
+// Percentile clipping bounds computed over the masked pixels only.
 function computeMaskedContrast(matrix, roi, lowPct = 2, highPct = 98) {
   const values = extractMaskedValues(matrix, roi);
   if (!values.length) return null;
   return computeContrastBounds([values], null, lowPct, highPct);
 }
 
-/** Cookie-cutter preview: everything outside the polygon becomes null (transparent). */
+// Cookie-cutter preview: everything outside the polygon becomes null (transparent).
 function maskedMatrixForDisplay(matrix, roi) {
   if (!matrix || !roi || !roi.active) return null;
   const { x0, y0, x1, y1 } = roi.bbox;
@@ -378,21 +317,17 @@ function maskedMatrixForDisplay(matrix, roi) {
   }));
 }
 
-/** Compact run-length-safe encoding of the boolean mask ("0110") for JSON export. */
+// Compact run-length-safe encoding of the boolean mask ("0110") for JSON export.
 function maskBitstrings(roi) {
   if (!roi || !roi.active) return [];
   return roi.mask.map(row => row.map(inside => (inside ? '1' : '0')).join(''));
 }
 
-/** Vertices as a single export-friendly string: "12,20 40,18 44,33". */
+// Vertices as a single export-friendly string: "12,20 40,18 44,33".
 function formatVertexList(roi) {
   if (!roi || !roi.active) return '';
   return roi.vertices.map(v => `${v.x},${v.y}`).join(' ');
 }
-
-// ============================================================================
-// 4. BATCH EXPORTS (one mask, N frames)
-// ============================================================================
 
 const MASK_BATCH_COLUMNS = [
   'index', 'frame', 'status',
@@ -400,13 +335,13 @@ const MASK_BATCH_COLUMNS = [
   'mad_degC', 'robust_std_degC', 'std_degC', 'delta_t_degC', 'pixel_count'
 ];
 
-/** Minimal CSV escaping (filenames can contain commas or quotes). */
+// Minimal CSV escaping (filenames can contain commas or quotes).
 function maskCsvCell(value) {
   const text = value === undefined || value === null ? '' : String(value);
   return /[",\n;]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text;
 }
 
-/** Statistics block with the same key names the Micro Inspector JSON exporter uses. */
+// Statistics block with the same key names the Micro Inspector JSON exporter uses.
 function maskStatsToJson(stats) {
   if (!stats) return null;
   return {
@@ -422,10 +357,6 @@ function maskStatsToJson(stats) {
   };
 }
 
-/**
- * Time-series CSV: one row per ingested frame, mask metadata in a leading comment
- * block so the file stays self-describing when it leaves the browser.
- */
 function buildMaskBatchCsv(payload) {
   const { roi, rows, generatedAt } = payload || {};
   const lines = [];
@@ -470,7 +401,7 @@ function buildMaskBatchCsv(payload) {
   return lines.join('\n') + '\n';
 }
 
-/** Structured JSON report: polygon + mask geometry + per-frame statistics. */
+// Structured JSON report: polygon + mask geometry + per-frame statistics.
 function buildMaskJson(payload) {
   const { roi, rows, stats, matrixWidth, matrixHeight, frameLabel, includeMask, timestamp } = payload || {};
 

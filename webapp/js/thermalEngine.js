@@ -1,4 +1,4 @@
-// --- STRICT SEMICOLON FLIR CSV PARSER ---
+// FLIR CSV export: semicolon-separated, may carry Russian or English header rows.
 function parseFlirCsvText(text) {
   const lines = text.split(/\r?\n/);
   let matrix = [];
@@ -20,8 +20,7 @@ function parseFlirCsvText(text) {
   return matrix.length > 0 ? matrix : null;
 }
 
-// --- RADIOMETRIC PLANCK RE-CALIBRATION ---
-// --- ASTM E1862/E1897 MULTI-PARAMETER RADIOMETRIC CALIBRATION ---
+// Radiometric calibration: Planck re-calibration plus the ASTM E1862/E1897 model.
 function computeAtmosphericTransmission(distanceMeters, relativeHumidity, atmTempC) {
   // Empirical water vapor partial pressure (Magnus-Tetens formulation)
   const p_sat = 6.1078 * Math.pow(10, (7.5 * atmTempC) / (237.3 + atmTempC));
@@ -82,7 +81,7 @@ function applyAstmCalibration(matrix, params) {
   };
 }
 
-// --- SPATIAL THERMAL GRADIENT (Center - Neighbor Avg Convolution) ---
+// Spatial gradient: centre minus neighbour average on a 3x3 window.
 function computeGradient2D(matrix) {// this is for computing the 2D gradient of the imported matrix
   const rows = matrix.length;
   const cols = matrix[0].length;
@@ -103,7 +102,7 @@ function computeGradient2D(matrix) {// this is for computing the 2D gradient of 
   }
   return grad;
 }
-// --- SIGNED SPATIAL THERMAL DEVIATION (Discrete Laplacian: Center - Neighbor Avg) ---
+// Signed Laplacian deviation (centre minus neighbour average).
 function computeLaplacianDeviation2D(matrix) {
   const rows = matrix.length;
   const cols = matrix[0].length;
@@ -128,7 +127,7 @@ function computeLaplacianDeviation2D(matrix) {
 // Backward compatibility alias
 
 
-// --- FIRST-ORDER 2D SOBEL GRADIENT MAGNITUDE (|∇T| = sqrt(Gx^2 + Gy^2)) ---
+// Sobel gradient magnitude |grad T| = sqrt(Gx^2 + Gy^2).
 function computeSobelGradient2D(matrix) {
   const rows = matrix.length;
   const cols = matrix[0].length;
@@ -155,8 +154,7 @@ function computeSobelGradient2D(matrix) {
   return gradMag;
 }
 
-// --- HOTSPOT ROI ENGINE ---
-// --- ROBUST DUAL-ESTIMATOR HOTSPOT ENGINE (Mean/Std vs Median/MAD) ---
+// Hotspot ROI: mean/std, with a median/MAD fallback on outlier-heavy frames.
 function detectHotspotROI(matrix, sensitivityMultiplier = 2.0) {
   const rows = matrix.length;
   const cols = matrix[0].length;
@@ -244,7 +242,7 @@ function detectHotspotROI(matrix, sensitivityMultiplier = 2.0) {
   };
 }
 
-// --- ISOTHERMAL RANGE MASK COMPUTATION ---
+// Isothermal range mask.
 function computeIsothermMask(matrix, minTemp, maxTemp) {
   const rows = matrix.length;
   const cols = matrix[0].length;
@@ -271,7 +269,7 @@ function computeIsothermMask(matrix, minTemp, maxTemp) {
     areaPercentage: areaPercentage
   };
 }
-// --- OFFLINE SIMULATION MATRIX GENERATOR ---
+// Offline simulation matrix.
 function generateMockThermalMatrix(rows = 60, cols = 80) {
   let matrix = Array.from({ length: rows }, () => new Array(cols).fill(22.0));
   for (let r = 0; r < rows; r++) {
@@ -293,7 +291,7 @@ function generateMockThermalMatrix(rows = 60, cols = 80) {
   }
   return matrix;
 }
-// --- PULSED PHASE THERMOGRAPHY (PPT) VIA 1D DISCRETE FOURIER TRANSFORM ---
+// Pulsed phase thermography: 1-D DFT across the frame sequence.
 function computePptMaps(frameSequence, targetFreqBin = 1) {
   const numFrames = frameSequence.length;
   if (numFrames < 3) return null;
@@ -337,7 +335,7 @@ function computePptMaps(frameSequence, targetFreqBin = 1) {
   };
 }
 
-// --- THERMAL SIGNAL RECONSTRUCTION (TSR) & TIME DERIVATIVES ---
+// TSR reconstruction and time derivatives.
 function computeTsrDerivatives(frameSequence, px, py) {
   const numFrames = frameSequence.length;
   if (numFrames < 3) return null;
@@ -376,7 +374,7 @@ function computeTsrDerivatives(frameSequence, px, py) {
     secondDerivative: d2
   };
 }
-// --- EDGE-PRESERVING 2D BILATERAL FILTER ---
+// Edge-preserving bilateral filter.
 function applyBilateralFilter2D(matrix, radius = 2, sigmaSpace = 2.5, sigmaColor = 1.2) {
   if (!matrix || matrix.length === 0) return matrix;
   const rows = matrix.length;
@@ -421,7 +419,7 @@ function applyBilateralFilter2D(matrix, radius = 2, sigmaSpace = 2.5, sigmaColor
   return filtered;
 }
 
-// --- ADAPTIVE EMISSIVITY MATRIX GENERATOR ---
+// Per-pixel emissivity from the material zones.
 function generateEmissivityMatrix(rawMatrix, zones = [], defaultEmissivity = 0.95) {
   const rows = rawMatrix.length;
   const cols = rawMatrix[0].length;
@@ -444,7 +442,7 @@ function generateEmissivityMatrix(rawMatrix, zones = [], defaultEmissivity = 0.9
   return epsMatrix;
 }
 
-// --- RADIOMETRIC INVERSION WITH SPATIALLY-VARYING EMISSIVITY ---
+// Radiometric inversion with the per-pixel emissivity.
 function applyZonedRadiometricCorrection(matrix, epsMatrix, reflTempC = 20.0, baseEmissivity = 0.95) {
   const eps_base = Math.max(0.05, Math.min(1.0, parseFloat(baseEmissivity) || 0.95));
   const T_refl_K4 = Math.pow((parseFloat(reflTempC) || 20.0) + 273.15, 4);
@@ -461,7 +459,7 @@ function applyZonedRadiometricCorrection(matrix, epsMatrix, reflTempC = 20.0, ba
     return parseFloat((T_corrected_K - 273.15).toFixed(2));
   }));
 }
-// --- 2D CONDUCTIVE HEAT FLUX VECTOR FIELD ENGINE (FOURIER'S LAW) ---
+// Conductive flux field: q = -k grad T.
 function computeHeatFluxField(matrix, kConductivity = 400.0, pixelPitchMeters = 0.001, downsampleStep = 5) {
   if (!matrix || matrix.length < 3 || matrix[0].length < 3) return null;
 
@@ -532,7 +530,7 @@ function computeHeatFluxField(matrix, kConductivity = 400.0, pixelPitchMeters = 
           arrowhead: 2,
           arrowsize: 1,
           arrowwidth: 1.2,
-          arrowcolor: '#38bdf8'
+          arrowcolor: '#111111'
         });
       }
     }
@@ -549,7 +547,7 @@ function computeHeatFluxField(matrix, kConductivity = 400.0, pixelPitchMeters = 
   };
 }
 
-// --- TRANSIENT THERMAL TIME CONSTANT (TAU) EXPONENTIAL FIT ENGINE ---
+// Exponential decay fit for the thermal time constant.
 function fitTransientTimeConstant(timeArray, tempArray, asymptoticTemp = 20.0, appliedPowerWatts = 5.0) {
   if (!timeArray || !tempArray || timeArray.length < 3 || timeArray.length !== tempArray.length) {
     return null;
@@ -627,7 +625,7 @@ function fitTransientTimeConstant(timeArray, tempArray, asymptoticTemp = 20.0, a
     fitCurve: temp_fit
   };
 }
-// --- PRINCIPAL COMPONENT THERMOGRAPHY (PCT) ENGINE ---
+// Principal component thermography (SVD via the temporal Gram matrix).
 function computePctModes(frameSequence, maxComponents = 3) {
   const numFrames = frameSequence.length;
   if (numFrames < 3) return null;
